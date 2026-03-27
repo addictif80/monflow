@@ -1,0 +1,338 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// UTILISATEURS
+// ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING       // En attente de confirmation email
+  ACTIVE        // Compte actif
+  SUSPENDED     // Suspendu pour retard de paiement
+  DELETED       // Supprimé (délai dépassé)
+}
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  username          String     @unique
+  passwordHash      String
+  role              UserRole   @default(USER)
+  status            UserStatus @default(PENDING)
+  emailVerified     Boolean    @default(false)
+  emailVerifyToken  String?
+  resetPasswordToken String?
+  resetPasswordExpiry DateTime?
+  navidromeUserId   String?    @unique
+  avatarUrl         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  lastLoginAt       DateTime?
+  suspendedAt       DateTime?
+  deletedAt         DateTime?
+
+  subscription    Subscription?
+  payments        Payment[]
+  playlists       Playlist[]
+  favorites       Favorite[]
+  tickets         Ticket[]
+  ticketMessages  TicketMessage[]
+  listeningHistory ListeningHistory[]
+  settings        UserSettings?
+  sessions        Session[]
+  auditLogsAsTarget AuditLog[] @relation("AuditTarget")
+  auditLogsAsAdmin  AuditLog[] @relation("AuditAdmin")
+
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SESSIONS (refresh tokens)
+// ─────────────────────────────────────────────────────────────
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ABONNEMENTS
+// ─────────────────────────────────────────────────────────────
+
+enum SubscriptionPlan {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE      // Paiement en retard (dans la période de grâce)
+  SUSPENDED     // Suspendu (période de grâce dépassée)
+  CANCELLED     // Annulé par l'utilisateur
+  TRIALING      // Période d'essai
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String             @unique
+  plan                   SubscriptionPlan
+  status                 SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean            @default(false)
+  stripeSubscriptionId   String?            @unique
+  stripeCustomerId       String?
+  stripePriceId          String?
+  trialEndDate           DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  cancelledAt            DateTime?
+  pastDueAt              DateTime?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([stripeSubscriptionId])
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PAIEMENTS
+// ─────────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  userId                String
+  subscriptionId        String?
+  amount                Int           // En centimes
+  currency              String        @default("eur")
+  status                PaymentStatus
+  description           String?
+  stripePaymentIntentId String?       @unique
+  stripeInvoiceId       String?       @unique
+  invoiceUrl            String?
+  failureReason         String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PLAYLISTS
+// ─────────────────────────────────────────────────────────────
+
+model Playlist {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  isPublic    Boolean  @default(false)
+  coverUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks PlaylistTrack[]
+
+  @@index([userId])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  trackId    String   // ID Navidrome
+  position   Int
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId, position])
+  @@map("playlist_tracks")
+}
+
+// ─────────────────────────────────────────────────────────────
+// FAVORIS
+// ─────────────────────────────────────────────────────────────
+
+model Favorite {
+  id      String   @id @default(cuid())
+  userId  String
+  trackId String   // ID Navidrome
+  addedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+  @@index([userId])
+  @@map("favorites")
+}
+
+// ─────────────────────────────────────────────────────────────
+// HISTORIQUE D'ÉCOUTE
+// ─────────────────────────────────────────────────────────────
+
+model ListeningHistory {
+  id         String   @id @default(cuid())
+  userId     String
+  trackId    String   // ID Navidrome
+  artistId   String?  // ID Navidrome
+  albumId    String?  // ID Navidrome
+  duration   Int?     // Secondes écoutées
+  playedAt   DateTime @default(now())
+  completed  Boolean  @default(false) // Track écoutée jusqu'au bout
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, playedAt])
+  @@index([trackId])
+  @@map("listening_history")
+}
+
+// ─────────────────────────────────────────────────────────────
+// TICKETS DE SUPPORT
+// ─────────────────────────────────────────────────────────────
+
+enum TicketStatus {
+  OPEN
+  PENDING_USER
+  PENDING_ADMIN
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Ticket {
+  id        String         @id @default(cuid())
+  userId    String
+  subject   String
+  status    TicketStatus   @default(OPEN)
+  priority  TicketPriority @default(MEDIUM)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  closedAt  DateTime?
+
+  user     User            @relation(fields: [userId], references: [id])
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  senderId  String
+  message   String   @db.Text
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User   @relation(fields: [senderId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+// ─────────────────────────────────────────────────────────────
+// JOURNAL D'AUDIT ADMIN
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  action       String   // ex: "USER_SUSPENDED", "PASSWORD_RESET", etc.
+  targetUserId String?
+  details      Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  admin      User  @relation("AuditAdmin", fields: [adminId], references: [id])
+  targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id])
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PARAMÈTRES UTILISATEUR
+// ─────────────────────────────────────────────────────────────
+
+model UserSettings {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  settings  Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// LYRICS (cache)
+// ─────────────────────────────────────────────────────────────
+
+model LyricsCache {
+  id        String   @id @default(cuid())
+  trackId   String   @unique  // ID Navidrome
+  trackName String
+  artist    String
+  lyrics    String?  @db.Text
+  synced    Json?    // Lyrics synchronisées [{ time: ms, text: string }]
+  source    String?  // "lrclib", "genius", etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lyrics_cache")
+}
