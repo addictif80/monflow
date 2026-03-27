@@ -1,0 +1,22 @@
+{
+  "name": "monflow",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "db:generate": "cd packages/api && npx prisma generate",
+    "db:migrate": "cd packages/api && npx prisma migrate deploy",
+    "db:studio": "cd packages/api && npx prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.0.0"
+}
