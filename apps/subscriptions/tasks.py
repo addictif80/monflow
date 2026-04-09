@@ -69,13 +69,26 @@ def check_overdue_subscriptions():
 
 
 def _suspend_user(sub, email_service):
-    """Suspend a user due to overdue payment."""
+    """Suspend a user due to overdue payment.
+
+    Changes the Navidrome password to a random value to lock out the user
+    while preserving their data (playlists, favorites, play counts).
+    """
+    from apps.accounts.models import User
+    from services.navidrome import navidrome_client
+
     user = sub.user
     if user.status != User.Status.SUSPENDED:
-        from apps.accounts.models import User
         user.status = User.Status.SUSPENDED
         user.is_active = False
         user.save(update_fields=['status', 'is_active'])
+
+        # Lock out from Navidrome by randomizing password
+        if user.navidrome_id:
+            try:
+                navidrome_client.suspend_user(user.navidrome_id)
+            except Exception:
+                logger.exception("Failed to suspend Navidrome user %s", user.navidrome_id)
 
     sub.status = sub.Status.SUSPENDED
     sub.save(update_fields=['status'])

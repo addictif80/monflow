@@ -153,6 +153,12 @@ def user_suspend(request, user_id):
         Subscription.objects.filter(user=user, status=Subscription.Status.ACTIVE).update(
             status=Subscription.Status.SUSPENDED
         )
+        # Lock out from Navidrome (randomize password)
+        if user.navidrome_id:
+            try:
+                navidrome_client.suspend_user(user.navidrome_id)
+            except Exception:
+                logger.exception("Failed to suspend Navidrome user %s", user.navidrome_id)
         try:
             email_service.send_account_suspended(user)
         except Exception:
@@ -165,9 +171,18 @@ def user_suspend(request, user_id):
 def user_reactivate(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if request.method == 'POST':
+        new_password = request.POST.get('new_password', '')
         user.status = User.Status.ACTIVE
         user.is_active = True
-        user.save(update_fields=['status', 'is_active'])
+        if new_password:
+            user.set_password(new_password)
+            # Restore Navidrome access with new password
+            if user.navidrome_id:
+                try:
+                    navidrome_client.reactivate_user(user.navidrome_id, new_password)
+                except Exception:
+                    logger.exception("Failed to reactivate Navidrome user %s", user.navidrome_id)
+        user.save()
         messages.success(request, f"Utilisateur {user.username} réactivé.")
     return redirect('admin_portal:user_detail', user_id=user_id)
 
@@ -214,9 +229,12 @@ def wallet_adjust(request, user_id):
         description = request.POST.get('description', 'Ajustement admin')
         try:
             from decimal import Decimal
+            from django.db import transaction
             amount = Decimal(amount)
-            wallet.balance += amount
-            wallet.save(update_fields=['balance'])
+            with transaction.atomic():
+                wallet = Wallet.objects.select_for_update().get(pk=wallet.pk)
+                wallet.balance += amount
+                wallet.save(update_fields=['balance'])
             WalletTransaction.objects.create(
                 wallet=wallet,
                 type=WalletTransaction.Type.ADJUSTMENT,

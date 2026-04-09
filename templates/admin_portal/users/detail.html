@@ -37,9 +37,13 @@
                     {% elif user_obj.status == 'suspended' %}
                     <form method="post" action="{% url 'admin_portal:user_reactivate' user_obj.id %}">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-sm btn-outline-success">
-                            <i class="bi bi-play-circle"></i> Réactiver
-                        </button>
+                        <div class="input-group input-group-sm mb-2">
+                            <input type="password" name="new_password" class="form-control" placeholder="Nouveau mot de passe" required>
+                            <button type="submit" class="btn btn-outline-success">
+                                <i class="bi bi-play-circle"></i> Réactiver
+                            </button>
+                        </div>
+                        <div class="text-muted" style="font-size: 0.7rem;">Un nouveau mot de passe est requis pour restaurer l'accès Navidrome.</div>
                     </form>
                     {% endif %}
                     {% if user_obj.status != 'deleted' %}

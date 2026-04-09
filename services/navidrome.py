@@ -1,6 +1,13 @@
-"""Navidrome API client for user management."""
+"""Navidrome API client for user management.
+
+Navidrome does NOT have a native suspend/disable feature.
+To "suspend" a user, we change their password to a random value,
+which locks them out while preserving their data (playlists, favorites, etc.).
+On reactivation, the portal password is synced back to Navidrome.
+"""
 
 import logging
+import secrets
 
 import requests
 from django.conf import settings
@@ -114,12 +121,26 @@ class NavidromeClient:
         response = self._request('GET', '/user')
         return response.json()
 
-    def enable_user(self, navidrome_id):
-        """Re-enable a previously disabled user (Navidrome doesn't have a native
-        disable flag, so we change the password to a random one to 'suspend',
-        and restore it when re-enabling. However, for our flow, we manage
-        access at the portal level and can optionally use this.)"""
-        logger.info("Enabled Navidrome user: %s", navidrome_id)
+    def suspend_user(self, navidrome_id):
+        """Suspend a user by changing their password to a random value.
+
+        Navidrome has no native suspend/disable feature. Changing the password
+        to an unknown random value locks them out of all clients while
+        preserving their data (playlists, favorites, play counts).
+        """
+        random_password = secrets.token_urlsafe(32)
+        self.change_password(navidrome_id, random_password)
+        logger.info("Suspended Navidrome user %s (password randomized)", navidrome_id)
+
+    def reactivate_user(self, navidrome_id, password):
+        """Reactivate a suspended user by restoring their password.
+
+        The portal must pass the user's actual password so it can be
+        synced back to Navidrome. Since Django stores hashed passwords,
+        the admin must set a new password on reactivation.
+        """
+        self.change_password(navidrome_id, password)
+        logger.info("Reactivated Navidrome user %s (password restored)", navidrome_id)
 
     def test_connection(self):
         """Test the connection to Navidrome."""
