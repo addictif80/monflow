@@ -1,0 +1,88 @@
+{% extends "customer_portal/base.html" %}
+{% load humanize %}
+
+{% block page_title %}Mon espace{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Abonnement</div>
+            {% if active_sub %}
+            <div class="stat-value text-success" style="font-size: 1.3rem;">{{ active_sub.plan.name }}</div>
+            <div class="small text-muted">Expire le {{ active_sub.current_period_end|date:"d/m/Y" }}</div>
+            {% else %}
+            <div class="stat-value text-muted" style="font-size: 1.3rem;">Aucun</div>
+            <a href="{% url 'customer_portal:subscription_plans' %}" class="btn btn-sm btn-primary mt-2">Voir les formules</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Portefeuille</div>
+            <div class="stat-value">{{ wallet.balance|default:"0"|floatformat:2 }}&euro;</div>
+            <a href="{% url 'customer_portal:wallet' %}" class="btn btn-sm btn-outline-primary mt-2">Gérer</a>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Actions rapides</div>
+            <div class="d-flex flex-column gap-2 mt-2">
+                <a href="{% url 'customer_portal:gift_subscription' %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-gift"></i> Offrir un abonnement
+                </a>
+                <a href="{% url 'support:ticket_create' %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-headset"></i> Ouvrir un ticket
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if active_sub %}
+<div class="card mb-3">
+    <div class="card-header py-2"><h6 class="mb-0">Mon abonnement</h6></div>
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-1">{{ active_sub.plan.name }}</h5>
+                <p class="text-muted mb-0">{{ active_sub.plan.price }}&euro;/{{ active_sub.plan.get_billing_cycle_display }} — {{ active_sub.plan.max_devices }} appareils</p>
+                {% if active_sub.is_gift %}<span class="badge bg-info">Offert par {{ active_sub.gifted_by }}</span>{% endif %}
+            </div>
+            <div class="col-auto">
+                <form method="post" action="{% url 'customer_portal:cancel_subscription' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Annuler votre abonnement ?')">
+                        Annuler l'abonnement
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">Derniers paiements</h6>
+        <a href="{% url 'customer_portal:payment_history' %}" class="btn btn-sm btn-outline-primary">Voir tout</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Description</th><th>Montant</th><th>Statut</th><th>Date</th></tr></thead>
+            <tbody>
+                {% for payment in recent_payments %}
+                <tr>
+                    <td class="small">{{ payment.description }}</td>
+                    <td class="fw-semibold">{{ payment.amount }}&euro;</td>
+                    <td><span class="badge badge-{% if payment.status == 'succeeded' %}active{% elif payment.status == 'failed' %}deleted{% else %}pending{% endif %}">{{ payment.get_status_display }}</span></td>
+                    <td class="small text-muted">{{ payment.created_at|date:"d/m/Y" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-center text-muted py-3">Aucun paiement</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Inscription — {{ SITE_NAME }}{% endblock %}
+
+{% block body %}
+<div class="min-vh-100 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);">
+    <div class="card shadow-lg border-0" style="width: 480px; border-radius: 1rem;">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <i class="bi bi-music-note-beamed text-primary" style="font-size: 2.5rem;"></i>
+                <h3 class="mt-2 fw-bold">Créer un compte</h3>
+                <p class="text-muted">Rejoignez {{ SITE_NAME }}</p>
+            </div>
+
+            {% include "components/messages.html" %}
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="row mb-3">
+                    <div class="col">
+                        <label class="form-label">Prénom</label>
+                        {{ form.first_name }}
+                    </div>
+                    <div class="col">
+                        <label class="form-label">Nom</label>
+                        {{ form.last_name }}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nom d'utilisateur</label>
+                    {{ form.username }}
+                    {% for error in form.username.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    {{ form.email }}
+                    {% for error in form.email.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Mot de passe</label>
+                    {{ form.password }}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Confirmer le mot de passe</label>
+                    {{ form.password_confirm }}
+                </div>
+                {% for error in form.non_field_errors %}<div class="alert alert-danger small">{{ error }}</div>{% endfor %}
+                <button type="submit" class="btn btn-primary w-100 py-2 mb-3">Créer mon compte</button>
+            </form>
+
+            <div class="text-center">
+                <p class="mb-0 small">Déjà un compte ? <a href="{% url 'accounts:login' %}" class="text-decoration-none">Se connecter</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

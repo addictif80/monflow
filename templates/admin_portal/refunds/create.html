@@ -1,0 +1,39 @@
+{% extends "admin_portal/base.html" %}
+
+{% block page_title %}Rembourser le paiement{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px;">
+    <div class="card-body">
+        <div class="mb-3">
+            <div class="text-muted small">Paiement original</div>
+            <div class="fw-bold fs-4">{{ payment.amount }}&euro;</div>
+            <div class="small">{{ payment.user }} — {{ payment.created_at|date:"d/m/Y H:i" }}</div>
+            <div class="small text-muted">{{ payment.description }}</div>
+        </div>
+        <hr>
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label">Montant à rembourser</label>
+                <input type="number" name="amount" step="0.01" max="{{ payment.amount }}" value="{{ payment.amount }}" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Destination</label>
+                <select name="refund_to" class="form-select">
+                    <option value="original">Moyen de paiement original</option>
+                    <option value="wallet">Portefeuille client</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Raison</label>
+                <textarea name="reason" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning" onclick="return confirm('Confirmer le remboursement ?')">Rembourser</button>
+                <a href="{% url 'admin_portal:payment_list' %}" class="btn btn-outline-secondary">Annuler</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "admin_portal/base.html" %}
+
+{% block page_title %}Configuration SMTP{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header py-2"><h6 class="mb-0">Serveur SMTP</h6></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary">Sauvegarder</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header py-2"><h6 class="mb-0">Tester la configuration</h6></div>
+            <div class="card-body">
+                {% if config %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="test_email" value="1">
+                    <div class="mb-3">
+                        <label class="form-label">Envoyer un email test à</label>
+                        <input type="email" name="test_email_address" class="form-control" placeholder="test@example.com" required>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-send"></i> Envoyer le test
+                    </button>
+                </form>
+                {% else %}
+                <p class="text-muted">Sauvegardez d'abord une configuration SMTP.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "admin_portal/base.html" %}
+
+{% block page_title %}Ticket: {{ ticket.subject }}{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">{{ ticket.subject }}</h6>
+                    <span class="badge badge-{% if ticket.status == 'open' %}pending{% elif ticket.status == 'resolved' %}active{% else %}suspended{% endif %}">
+                        {{ ticket.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                {% for msg in ticket_messages %}
+                <div class="mb-3 p-3 rounded {% if msg.is_staff_reply %}bg-primary bg-opacity-10 ms-4{% else %}bg-light me-4{% endif %}">
+                    <div class="d-flex justify-content-between mb-1">
+                        <strong class="small">
+                            {% if msg.is_staff_reply %}<i class="bi bi-headset"></i>{% endif %}
+                            {{ msg.author }}
+                        </strong>
+                        <span class="text-muted small">{{ msg.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    <div>{{ msg.body|linebreaksbr }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Reply form -->
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Répondre</label>
+                        <textarea name="body" class="form-control" rows="4" placeholder="Votre réponse..."></textarea>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <select name="status" class="form-select form-select-sm" style="width: auto;">
+                                <option value="">-- Changer le statut --</option>
+                                <option value="in_progress">En cours</option>
+                                <option value="waiting_customer">En attente du client</option>
+                                <option value="resolved">Résolu</option>
+                                <option value="closed">Fermé</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="small">
+                    <div class="mb-2"><strong>Client:</strong> <a href="{% url 'admin_portal:user_detail' ticket.user_id %}">{{ ticket.user }}</a></div>
+                    <div class="mb-2"><strong>Catégorie:</strong> {{ ticket.get_category_display }}</div>
+                    <div class="mb-2"><strong>Priorité:</strong> {{ ticket.get_priority_display }}</div>
+                    <div class="mb-2"><strong>Créé le:</strong> {{ ticket.created_at|date:"d/m/Y H:i" }}</div>
+                    {% if ticket.closed_at %}<div class="mb-2"><strong>Fermé le:</strong> {{ ticket.closed_at|date:"d/m/Y H:i" }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

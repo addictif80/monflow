@@ -1,0 +1,101 @@
+{% extends "admin_portal/base.html" %}
+{% load humanize %}
+
+{% block page_title %}Tableau de bord{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card d-flex align-items-center gap-3">
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="stat-value">{{ total_users }}</div>
+                <div class="stat-label">Utilisateurs ({{ active_users }} actifs)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card d-flex align-items-center gap-3">
+            <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-credit-card"></i></div>
+            <div>
+                <div class="stat-value">{{ active_subscriptions }}</div>
+                <div class="stat-label">Abonnements actifs</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card d-flex align-items-center gap-3">
+            <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-exclamation-triangle"></i></div>
+            <div>
+                <div class="stat-value">{{ suspended_users }}</div>
+                <div class="stat-label">Comptes suspendus</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card d-flex align-items-center gap-3">
+            <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-cash-stack"></i></div>
+            <div>
+                <div class="stat-value">{{ revenue_month|floatformat:0 }}&euro;</div>
+                <div class="stat-label">Revenus du mois</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center py-3">
+                <h6 class="mb-0">Derniers paiements</h6>
+                <a href="{% url 'admin_portal:payment_list' %}" class="btn btn-sm btn-outline-primary">Voir tout</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr><th>Client</th><th>Montant</th><th>Statut</th><th>Date</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in recent_payments %}
+                        <tr>
+                            <td>{{ payment.user }}</td>
+                            <td>{{ payment.amount }}&euro;</td>
+                            <td>
+                                <span class="badge {% if payment.status == 'succeeded' %}badge-active{% elif payment.status == 'failed' %}badge-deleted{% else %}badge-pending{% endif %}">
+                                    {{ payment.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="text-muted small">{{ payment.created_at|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-muted text-center py-3">Aucun paiement</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center py-3">
+                <h6 class="mb-0">Tickets récents</h6>
+                <a href="{% url 'admin_portal:ticket_list' %}" class="btn btn-sm btn-outline-primary">Voir tout</a>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for ticket in recent_tickets %}
+                    <li class="list-group-item">
+                        <a href="{% url 'admin_portal:ticket_detail' ticket.id %}" class="text-decoration-none">
+                            <div class="fw-semibold small">{{ ticket.subject|truncatewords:8 }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">{{ ticket.user }} — {{ ticket.created_at|date:"d/m" }}</div>
+                        </a>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted text-center py-3">Aucun ticket</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

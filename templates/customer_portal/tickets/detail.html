@@ -1,0 +1,46 @@
+{% extends "customer_portal/base.html" %}
+
+{% block page_title %}{{ ticket.subject }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <span class="badge badge-{% if ticket.status == 'open' or ticket.status == 'in_progress' %}pending{% elif ticket.status == 'resolved' or ticket.status == 'closed' %}active{% else %}suspended{% endif %}">
+        {{ ticket.get_status_display }}
+    </span>
+    <span class="text-muted small ms-2">{{ ticket.get_category_display }} — {{ ticket.created_at|date:"d/m/Y H:i" }}</span>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        {% for msg in ticket_messages %}
+        <div class="mb-3 p-3 rounded {% if msg.is_staff_reply %}bg-primary bg-opacity-10 ms-4{% else %}bg-light me-4{% endif %}">
+            <div class="d-flex justify-content-between mb-1">
+                <strong class="small">
+                    {% if msg.is_staff_reply %}<i class="bi bi-headset"></i> Support{% else %}Vous{% endif %}
+                </strong>
+                <span class="text-muted small">{{ msg.created_at|date:"d/m/Y H:i" }}</span>
+            </div>
+            <div>{{ msg.body|linebreaksbr }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if ticket.status != 'closed' and ticket.status != 'resolved' %}
+<div class="card">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <textarea name="body" class="form-control" rows="3" placeholder="Votre message..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-success">
+    <i class="bi bi-check-circle"></i> Ce ticket est {{ ticket.get_status_display|lower }}.
+</div>
+{% endif %}
+{% endblock %}
