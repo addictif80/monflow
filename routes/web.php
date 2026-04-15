@@ -52,7 +52,20 @@ Route::middleware('auth')->group(function () {
     Route::match(['get', 'post'], '/support/tickets/{ticket}', [TicketController::class, 'show']);
 
     // Web player
-    Route::get('/player', fn() => view('player.index'));
+    Route::get('/player', function () {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $password = $user->getDecryptedPassword();
+        if (!$password) {
+            return redirect('/portal')->with('error', 'Lecteur web indisponible : mot de passe non stocké. Changez votre mot de passe depuis votre profil.');
+        }
+        $salt = \Illuminate\Support\Str::random(12);
+        return view('player.index', [
+            'ndUrl' => rtrim(config('navidrome.public_url'), '/'),
+            'ndUser' => $user->username,
+            'ndSalt' => $salt,
+            'ndToken' => md5($password . $salt),
+        ]);
+    });
 });
 
 // ─── Admin Panel ───
