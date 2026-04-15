@@ -1,0 +1,106 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\{User, Payment, Subscription, Plan, Wallet, WalletTransaction};
+use App\Services\{NavidromeService, StripeService, EmailService};
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\{DB, Log, Hash};
+
+class PaymentController extends Controller
+{
+    public function success() { return view('portal.payment-success'); }
+    public function walletSuccess() { return view('portal.wallet-success'); }
+    public function giftSuccess() { return view('portal.gift-success'); }
+
+    public function stripeWebhook(Request $request, StripeService $stripe, NavidromeService $nd, EmailService $mail)
+    {
+        try {
+            $event = $stripe->constructWebhookEvent($request->getContent(), $request->header('Stripe-Signature', ''));
+        } catch (\Exception $e) { return response('', 400); }
+
+        $data = $event->data->object;
+        try {
+            match ($event->type) {
+                'checkout.session.completed' => $this->handleCheckout($data, $nd, $mail),
+                'invoice.payment_succeeded' => $this->handleInvoiceSuccess($data, $mail),
+                'invoice.payment_failed' => $this->handleInvoiceFailed($data),
+                default => null,
+            };
+        } catch (\Exception $e) { Log::error("Webhook error [{$event->type}]: {$e->getMessage()}"); }
+        return response('', 200);
+    }
+
+    private function handleCheckout($session, NavidromeService $nd, EmailService $mail): void
+    {
+        $meta = $session->metadata?->toArray() ?? [];
+        $userId = $meta['user_id'] ?? null;
+        if (!$userId) return;
+        $user = User::find($userId);
+        if (!$user) return;
+
+        $type = $meta['type'] ?? 'subscription';
+        $amount = ($session->amount_total ?? 0) / 100;
+
+        if ($type === 'wallet_topup') {
+            $wallet = Wallet::firstOrCreate(['user_id' => $user->id]);
+            DB::transaction(function () use ($wallet, $amount, $session) {
+                $wallet = Wallet::lockForUpdate()->find($wallet->id);
+                $wallet->increment('balance', $amount);
+                WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'topup', 'amount' => $amount, 'description' => 'Rechargement Stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '']);
+            });
+            Payment::create(['user_id' => $user->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => 'Rechargement portefeuille']);
+        } elseif ($type === 'gift') {
+            $plan = Plan::find($meta['plan_id'] ?? '');
+            $recipientEmail = $meta['recipient_email'] ?? '';
+            if (!$plan || !$recipientEmail) return;
+            $recipient = User::where('email', $recipientEmail)->first();
+            if (!$recipient) {
+                $pw = bin2hex(random_bytes(8));
+                $recipient = User::create(['username' => explode('@', $recipientEmail)[0] . rand(10, 99), 'email' => $recipientEmail, 'password' => Hash::make($pw)]);
+                $recipient->storeEncryptedPassword($pw);
+                Wallet::create(['user_id' => $recipient->id]);
+                try { $r = $nd->createUser($recipient->username, $pw, '', $recipientEmail); $recipient->update(['navidrome_id' => $r['id'] ?? null]); } catch (\Exception $e) {}
+            }
+            Subscription::create(['user_id' => $recipient->id, 'plan_id' => $plan->id, 'status' => 'active', 'is_gift' => true, 'gifted_by' => $user->id, 'gift_recipient_email' => $recipientEmail, 'current_period_start' => now(), 'current_period_end' => now()->addDays($plan->period_days)]);
+            Payment::create(['user_id' => $user->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => "Cadeau {$plan->name} pour {$recipientEmail}"]);
+            try { $mail->sendGiftReceived($recipientEmail, $plan->name); } catch (\Exception $e) {}
+        } else {
+            $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->latest()->first();
+            if ($sub) {
+                $sub->update(['status' => 'active', 'stripe_subscription_id' => $session->subscription ?? '', 'current_period_start' => now(), 'current_period_end' => now()->addDays($sub->plan->period_days)]);
+                if ($sub->promo_code_id) PromoCode::where('id', $sub->promo_code_id)->increment('current_uses');
+            }
+            Payment::create(['user_id' => $user->id, 'subscription_id' => $sub?->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => 'Abonnement ' . ($sub?->plan?->name ?? '')]);
+
+            // Si l'utilisateur était suspendu et paie, on le réactive avec son mot de passe original
+            if ($user->status === 'suspended') {
+                $user->update(['status' => 'active']);
+                Subscription::where('user_id', $user->id)->where('status', 'suspended')->update(['status' => 'active']);
+                if ($user->navidrome_id) {
+                    $originalPassword = $user->getDecryptedPassword();
+                    if ($originalPassword) {
+                        try { app(NavidromeService::class)->reactivateUser($user->navidrome_id, $originalPassword); } catch (\Exception $e) { Log::error($e->getMessage()); }
+                    }
+                }
+            }
+        }
+    }
+
+    private function handleInvoiceSuccess($invoice, EmailService $mail): void
+    {
+        $user = User::where('stripe_customer_id', $invoice->customer)->first();
+        if (!$user) return;
+        $sub = $user->activeSubscription;
+        if ($sub) { $sub->update(['current_period_start' => now(), 'current_period_end' => now()->addDays($sub->plan->period_days)]); }
+        $amount = ($invoice->amount_paid ?? 0) / 100;
+        Payment::create(['user_id' => $user->id, 'subscription_id' => $sub?->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_invoice_id' => $invoice->id ?? '', 'description' => 'Renouvellement']);
+    }
+
+    private function handleInvoiceFailed($invoice): void
+    {
+        $user = User::where('stripe_customer_id', $invoice->customer)->first();
+        if (!$user) return;
+        Payment::create(['user_id' => $user->id, 'amount' => ($invoice->amount_due ?? 0) / 100, 'status' => 'failed', 'payment_method' => 'stripe', 'stripe_invoice_id' => $invoice->id ?? '', 'description' => 'Échec paiement']);
+    }
+}
