@@ -64,6 +64,11 @@ class PaymentController extends Controller
             }
             Subscription::create(['user_id' => $recipient->id, 'plan_id' => $plan->id, 'status' => 'active', 'is_gift' => true, 'gifted_by' => $user->id, 'gift_recipient_email' => $recipientEmail, 'current_period_start' => now(), 'current_period_end' => now()->addDays($plan->period_days)]);
             Payment::create(['user_id' => $user->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => "Cadeau {$plan->name} pour {$recipientEmail}"]);
+            // Ouvrir l'accès Navidrome au destinataire (cas user existant qui était suspendu)
+            if ($recipient->navidrome_id) {
+                $rpw = $recipient->getDecryptedPassword();
+                if ($rpw) { try { $nd->reactivateUser($recipient->navidrome_id, $rpw); } catch (\Exception $e) {} }
+            }
             try { $mail->sendGiftReceived($recipientEmail, $plan->name); } catch (\Exception $e) {}
         } else {
             $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->latest()->first();
@@ -73,15 +78,16 @@ class PaymentController extends Controller
             }
             Payment::create(['user_id' => $user->id, 'subscription_id' => $sub?->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => 'Abonnement ' . ($sub?->plan?->name ?? '')]);
 
-            // Si l'utilisateur était suspendu et paie, on le réactive avec son mot de passe original
+            // Si suspendu (impayé), on remet le statut user/sub en actif
             if ($user->status === 'suspended') {
                 $user->update(['status' => 'active']);
                 Subscription::where('user_id', $user->id)->where('status', 'suspended')->update(['status' => 'active']);
-                if ($user->navidrome_id) {
-                    $originalPassword = $user->getDecryptedPassword();
-                    if ($originalPassword) {
-                        try { app(NavidromeService::class)->reactivateUser($user->navidrome_id, $originalPassword); } catch (\Exception $e) { Log::error($e->getMessage()); }
-                    }
+            }
+            // Toujours (re)donner accès à Navidrome au paiement : premier achat OU réactivation
+            if ($user->navidrome_id) {
+                $originalPassword = $user->getDecryptedPassword();
+                if ($originalPassword) {
+                    try { app(NavidromeService::class)->reactivateUser($user->navidrome_id, $originalPassword); } catch (\Exception $e) { Log::error($e->getMessage()); }
                 }
             }
         }

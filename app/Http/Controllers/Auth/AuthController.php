@@ -57,6 +57,10 @@ class AuthController extends Controller
         try {
             $nd_user = $nd->createUser($user->username, $data['password'], $user->full_name, $user->email);
             $user->update(['navidrome_id' => $nd_user['id'] ?? null]);
+            // Suspendre immédiatement Navidrome : l'accès musique nécessite un abonnement actif
+            if ($user->navidrome_id) {
+                $nd->suspendUser($user->navidrome_id);
+            }
         } catch (\Exception $e) { Log::error("Navidrome create failed: {$e->getMessage()}"); }
 
         try { $mail->sendWelcome($user); } catch (\Exception $e) {}

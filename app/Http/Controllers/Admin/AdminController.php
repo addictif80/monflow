@@ -41,7 +41,14 @@ class AdminController extends Controller
             $user = User::create([...$data, 'password' => Hash::make($data['password']), 'is_admin' => (bool)($data['is_admin'] ?? false)]);
             $user->storeEncryptedPassword($data['password']);
             Wallet::create(['user_id' => $user->id]);
-            try { $r = $nd->createUser($user->username, $data['password'], $user->full_name, $user->email); $user->update(['navidrome_id' => $r['id'] ?? null]); } catch (\Exception $e) { Log::error($e->getMessage()); }
+            try {
+                $r = $nd->createUser($user->username, $data['password'], $user->full_name, $user->email);
+                $user->update(['navidrome_id' => $r['id'] ?? null]);
+                // Les non-admins doivent souscrire avant d'avoir accès à Navidrome
+                if ($user->navidrome_id && !$user->is_admin) {
+                    $nd->suspendUser($user->navidrome_id);
+                }
+            } catch (\Exception $e) { Log::error($e->getMessage()); }
             try { $mail->sendWelcome($user); } catch (\Exception $e) {}
             return redirect('/admin/users')->with('success', "Utilisateur {$user->username} créé.");
         }
