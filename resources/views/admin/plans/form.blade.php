@@ -49,8 +49,9 @@
             {{-- Stripe Price ID --}}
             <div>
                 <label for="stripe_price_id" class="block text-sm text-gray-400 mb-1">Stripe Price ID</label>
-                <input type="text" id="stripe_price_id" name="stripe_price_id" value="{{ old('stripe_price_id', $plan->stripe_price_id ?? '') }}"
+                <input type="text" id="stripe_price_id" name="stripe_price_id" value="{{ old('stripe_price_id', $plan->stripe_price_id ?? '') }}" placeholder="price_1AbCdEf..."
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-indigo-500 font-mono">
+                <p class="text-xs text-gray-500 mt-1">Commence par <code class="text-indigo-400">price_</code> — pas <code>prod_</code>. Dans Stripe, ouvrez le Produit puis copiez l'ID de la ligne de tarification.</p>
             </div>
 
             {{-- Max Devices --}}

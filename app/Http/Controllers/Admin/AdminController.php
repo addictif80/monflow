@@ -60,12 +60,14 @@ class AdminController extends Controller
         $user = User::findOrFail($id);
         if ($request->isMethod('post')) {
             $data = $request->validate(['username' => "required|unique:users,username,{$id}", 'email' => "required|email|unique:users,email,{$id}", 'first_name' => 'nullable', 'last_name' => 'nullable', 'phone' => 'nullable', 'status' => 'required', 'password' => 'nullable|min:6', 'is_admin' => 'nullable']);
+            $plainPassword = $data['password'] ?? null;
+            unset($data['password']); // Ne jamais fill le password depuis $data (évite d'écraser avec null)
             $user->fill($data);
             $user->is_admin = (bool)($data['is_admin'] ?? false);
-            if (!empty($data['password'])) {
-                $user->password = Hash::make($data['password']);
-                $user->storeEncryptedPassword($data['password']);
-                if ($user->navidrome_id) { try { $nd->changePassword($user->navidrome_id, $data['password']); } catch (\Exception $e) {} }
+            if (!empty($plainPassword)) {
+                $user->password = Hash::make($plainPassword);
+                $user->storeEncryptedPassword($plainPassword);
+                if ($user->navidrome_id) { try { $nd->changePassword($user->navidrome_id, $plainPassword); } catch (\Exception $e) {} }
             }
             $user->save();
             return redirect('/admin/users')->with('success', 'Utilisateur mis à jour.');
@@ -135,13 +137,13 @@ class AdminController extends Controller
     public function plans() { return view('admin.plans.list', ['plans' => Plan::orderBy('sort_order')->get()]); }
     public function planCreate(Request $request)
     {
-        if ($request->isMethod('post')) { Plan::create($request->validate(['name' => 'required', 'description' => 'nullable', 'price' => 'required|numeric', 'billing_cycle' => 'required', 'stripe_price_id' => 'nullable', 'max_devices' => 'required|integer', 'sort_order' => 'nullable|integer'])); return redirect('/admin/plans')->with('success', 'Formule créée.'); }
+        if ($request->isMethod('post')) { Plan::create($request->validate(['name' => 'required', 'description' => 'nullable', 'price' => 'required|numeric', 'billing_cycle' => 'required', 'stripe_price_id' => 'nullable|starts_with:price_', 'max_devices' => 'required|integer', 'sort_order' => 'nullable|integer'], ['stripe_price_id.starts_with' => 'Le Stripe Price ID doit commencer par "price_" (pas "prod_"). Dans Stripe, ouvrez le Produit → section Tarification → copiez l\'ID qui commence par price_.'])); return redirect('/admin/plans')->with('success', 'Formule créée.'); }
         return view('admin.plans.form', ['title' => 'Nouvelle formule', 'plan' => null]);
     }
     public function planEdit(string $id, Request $request)
     {
         $plan = Plan::findOrFail($id);
-        if ($request->isMethod('post')) { $plan->update($request->validate(['name' => 'required', 'description' => 'nullable', 'price' => 'required|numeric', 'billing_cycle' => 'required', 'stripe_price_id' => 'nullable', 'max_devices' => 'required|integer', 'is_active' => 'nullable', 'sort_order' => 'nullable|integer'])); return redirect('/admin/plans')->with('success', 'Formule mise à jour.'); }
+        if ($request->isMethod('post')) { $plan->update($request->validate(['name' => 'required', 'description' => 'nullable', 'price' => 'required|numeric', 'billing_cycle' => 'required', 'stripe_price_id' => 'nullable|starts_with:price_', 'max_devices' => 'required|integer', 'is_active' => 'nullable', 'sort_order' => 'nullable|integer'], ['stripe_price_id.starts_with' => 'Le Stripe Price ID doit commencer par "price_" (pas "prod_"). Dans Stripe, ouvrez le Produit → section Tarification → copiez l\'ID qui commence par price_.'])); return redirect('/admin/plans')->with('success', 'Formule mise à jour.'); }
         return view('admin.plans.form', ['title' => "Modifier {$plan->name}", 'plan' => $plan]);
     }
 
