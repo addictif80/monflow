@@ -111,7 +111,7 @@ class AdminController extends Controller
     {
         $user = User::findOrFail($id);
         try { $mail->sendDeleted($user); } catch (\Exception $e) {}
-        if ($user->navidrome_id) { try { $nd->deleteUser($user->navidrome_id); } catch (\Exception $e) {} }
+        if ($user->navidrome_id) { try { $nd->deleteUser($user->navidrome_id); } catch (\Exception $e) { Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}"); } }
         foreach (Subscription::where('user_id', $id)->whereNotNull('stripe_subscription_id')->where('stripe_subscription_id', '!=', '')->get() as $sub) {
             try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
         }

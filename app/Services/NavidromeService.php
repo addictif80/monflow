@@ -118,9 +118,19 @@ class NavidromeService
 
     public function deleteUser(string $navidromeId): void
     {
-        Http::timeout(10)
+        if (!$this->token) {
+            $this->authenticate();
+        }
+        $response = Http::timeout(10)
             ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
             ->delete("{$this->baseUrl}/api/user/{$navidromeId}");
+        if ($response->status() === 401) {
+            $this->authenticate();
+            $response = Http::timeout(10)
+                ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
+                ->delete("{$this->baseUrl}/api/user/{$navidromeId}");
+        }
+        $response->throw();
         Log::info("Navidrome: deleted user {$navidromeId}");
     }
 
