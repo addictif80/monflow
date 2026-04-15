@@ -51,9 +51,12 @@ Route::middleware('auth')->group(function () {
     Route::match(['get', 'post'], '/support/tickets/create', [TicketController::class, 'create']);
     Route::match(['get', 'post'], '/support/tickets/{ticket}', [TicketController::class, 'show']);
 
-    // Web player
+    // Web player — réservé aux abonnés actifs (et admins)
     Route::get('/player', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
+        if (!$user->is_admin && !$user->activeSubscription) {
+            return redirect('/portal/plans')->with('error', 'Le lecteur est réservé aux abonnés. Souscrivez à une formule pour accéder à votre musique.');
+        }
         $password = $user->getDecryptedPassword();
         if (!$password) {
             return redirect('/portal')->with('error', 'Lecteur web indisponible : mot de passe non stocké. Changez votre mot de passe depuis votre profil.');
