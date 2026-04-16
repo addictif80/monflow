@@ -9,7 +9,12 @@ use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Route;
 
 // ─── Public ───
-Route::get('/', fn() => redirect('/login'));
+Route::get('/', function () {
+    if (\Illuminate\Support\Facades\Auth::check()) {
+        return redirect(\Illuminate\Support\Facades\Auth::user()->is_admin ? '/admin' : '/portal');
+    }
+    return redirect('/login');
+});
 
 // ─── Auth ───
 Route::middleware('guest')->group(function () {

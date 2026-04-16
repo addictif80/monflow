@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
         ]);
+        $middleware->redirectUsersTo(fn () => auth()->user()?->is_admin ? '/admin' : '/portal');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
