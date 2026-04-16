@@ -51,11 +51,14 @@ class DeemixProxyController extends Controller
             $fwdHeaders['Cookie'] = collect($jar)->map(fn($v, $k) => "{$k}={$v}")->implode('; ');
         }
 
+        // Socket.IO long-polling maintient la connexion ouverte ~25s
+        $timeout = str_contains($any, 'socket.io') ? 60 : 30;
+
         $http = Http::withHeaders($fwdHeaders)
             ->withOptions([
                 'verify' => config('services.deemix.verify_ssl', true),
                 'allow_redirects' => false,
-                'timeout' => 30,
+                'timeout' => $timeout,
             ]);
 
         $body = $request->getContent();
@@ -111,23 +114,33 @@ class DeemixProxyController extends Controller
 
     private function rewriteHtml(string $html, string $base): string
     {
+        $prefix = self::PREFIX;
+
         // URLs absolues vers le domaine Deemix
-        $html = str_replace($base, self::PREFIX, $html);
+        $html = str_replace($base, $prefix, $html);
 
         // Attributs href/src/action commençant par / mais pas déjà préfixés
-        $prefix = self::PREFIX;
         $html = preg_replace_callback(
             '/((?:href|src|action|data-src)=)(["\'])(\/(?!\/|' . preg_quote(ltrim($prefix, '/'), '/') . ')[^"\']*)\2/i',
             fn($m) => $m[1] . $m[2] . $prefix . $m[3] . $m[2],
             $html
         );
 
-        // Balise <base href> pour que les chemins relatifs tombent sous /portal/deemix/
+        // Injection dans <head> : base href + script d'interception réseau
+        $headInject = '';
         if (!str_contains($html, '<base ')) {
-            $html = preg_replace('/<head(\s[^>]*)?>/i', '<head$1><base href="' . $prefix . '/">', $html, 1);
+            $headInject .= '<base href="' . $prefix . '/">';
         }
 
-        // Bouton "Retour au portail" injecté dans le body pour rester transparent
+        // Script injecté AVANT les scripts de l'app pour intercepter fetch/XHR/EventSource/pushState
+        // Les requêtes JS vers /socket.io/, /api/, etc. sont redirigées via le proxy
+        $headInject .= <<<'JSBLOCK'
+<script>(function(){var P="/portal/deemix";function r(u){if(typeof u!=="string"||!u)return u;if(u.indexOf(P)!==-1)return u;if(u.charAt(0)==="/"&&u.charAt(1)!=="/"&&u.indexOf("/portal/")!==0)return P+u;var O=location.origin+"/";if(u.indexOf(O)===0){var p=u.substring(location.origin.length);if(p.indexOf("/portal/")!==0)return location.origin+P+p}return u}var oF=window.fetch;window.fetch=function(i,o){if(typeof i==="string")i=r(i);else if(i instanceof Request)i=new Request(r(i.url),i);return oF.call(this,i,o)};var oX=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){var a=[].slice.call(arguments);a[1]=r(a[1]);return oX.apply(this,a)};if(window.EventSource){var oE=window.EventSource;window.EventSource=function(u,o){return new oE(r(u),o)};window.EventSource.prototype=oE.prototype}var oP=history.pushState,oR=history.replaceState;history.pushState=function(s,t,u){return oP.call(this,s,t,u?r(u):u)};history.replaceState=function(s,t,u){return oR.call(this,s,t,u?r(u):u)}})()</script>
+JSBLOCK;
+
+        $html = preg_replace('/<head(\s[^>]*)?>/i', '<head$1>' . $headInject, $html, 1);
+
+        // Bouton "Retour au portail" injecté dans le body
         $backBtn = '<a href="/portal" style="position:fixed;top:10px;right:10px;z-index:99999;background:#4f46e5;color:#fff;padding:8px 14px;border-radius:6px;font-family:-apple-system,Segoe UI,sans-serif;font-size:13px;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.3)">&larr; MonFlow</a>';
         $html = preg_replace('/<body(\s[^>]*)?>/i', '<body$1>' . $backBtn, $html, 1);
 
