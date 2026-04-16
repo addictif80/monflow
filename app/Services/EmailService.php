@@ -55,6 +55,7 @@ class EmailService
         }
     }
 
+    public function sendVerification(User $u, string $url): void { $this->sendTemplate('email_verification', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'verify_url' => $url]); }
     public function sendWelcome(User $u): void { $this->sendTemplate('welcome', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
     public function sendPaymentReminder(User $u, int $days): void { $this->sendTemplate('payment_reminder', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'days_overdue' => $days]); }
     public function sendPasswordReset(User $u, string $url): void { $this->sendTemplate('password_reset', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'reset_url' => $url]); }

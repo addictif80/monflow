@@ -43,6 +43,29 @@
                     </form>
                 </div>
             </div>
+        @elseif($pendingSub)
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-400">Formule</span>
+                    <span class="font-medium text-indigo-400">{{ $pendingSub->plan->name }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-400">Statut</span>
+                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-900/50 text-yellow-400 border border-yellow-700">Paiement en attente</span>
+                </div>
+                <p class="text-sm text-gray-400">Votre paiement n'a pas été finalisé. Vous pouvez le reprendre maintenant.</p>
+                <form action="/portal/resume-payment" method="POST" class="space-y-2 pt-2 border-t border-gray-700">
+                    @csrf
+                    <label class="block text-sm text-gray-400">Durée</label>
+                    <select name="months" class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm">
+                        <option value="1">1 mois (abonnement récurrent)</option>
+                        <option value="3">3 mois prépayés</option>
+                        <option value="6">6 mois prépayés</option>
+                        <option value="12">12 mois prépayés</option>
+                    </select>
+                    <button type="submit" class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition">Payer maintenant</button>
+                </form>
+            </div>
         @else
             <p class="text-gray-400 mb-4">Aucun abonnement actif.</p>
             <a href="/portal/plans" class="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">

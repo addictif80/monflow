@@ -19,8 +19,9 @@
                 <a href="/portal/devices" class="hover:text-indigo-400">Appareils</a>
                 <a href="/support/tickets" class="hover:text-indigo-400">Support</a>
                 <a href="/player" class="hover:text-indigo-400 text-indigo-300 font-medium">Lecteur</a>
+                <a href="/portal/deemix" class="hover:text-indigo-400 text-indigo-300 font-medium">Deemix</a>
                 <span class="text-gray-400">|</span>
-                <span class="text-gray-400">{{ Auth::user()->username }}</span>
+                <a href="/portal/profile" class="text-gray-300 hover:text-indigo-400">{{ Auth::user()->username }}</a>
                 <form action="/logout" method="POST" class="inline">@csrf<button class="hover:text-red-400">Déconnexion</button></form>
             </div>
         </div>
