@@ -64,15 +64,25 @@ class DashboardController extends Controller
         $user = Auth::user();
         if ($user->activeSubscription) return redirect('/portal')->with('error', 'Vous avez déjà un abonnement actif.');
 
+        if (!$plan->stripe_price_id || !str_starts_with($plan->stripe_price_id, 'price_')) {
+            Log::error("Plan {$plan->id} ({$plan->name}) has an invalid stripe_price_id: " . ($plan->stripe_price_id ?? 'null'));
+            return redirect('/portal/plans')->with('error', 'Cette formule est mal configurée (Stripe Price ID manquant ou invalide). Merci de contacter le support.');
+        }
+
         $promo = null;
         if ($code = $request->query('promo')) {
             $promo = PromoCode::where('code', $code)->first();
             if ($promo && !$promo->is_valid) $promo = null;
         }
 
-        $session = $stripe->createCheckoutSession($user, $plan,
-            url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
-            url('/portal/plans'));
+        try {
+            $session = $stripe->createCheckoutSession($user, $plan,
+                url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
+                url('/portal/plans'));
+        } catch (\Exception $e) {
+            Log::error("Stripe checkout failed for user {$user->id} plan {$plan->id}: {$e->getMessage()}");
+            return redirect('/portal/plans')->with('error', 'Impossible de démarrer le paiement. Merci de réessayer ou de contacter le support.');
+        }
 
         Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
         return redirect($session->url);

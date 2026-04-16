@@ -21,7 +21,9 @@
         <div class="mb-4">
             <label class="block text-sm text-gray-400 mb-1">Corps HTML</label>
             <textarea name="html_body" rows="16" required class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:border-indigo-500">{{ old('html_body', $template->html_body ?? '') }}</textarea>
-            <p class="text-xs text-gray-500 mt-1">Variables disponibles : {{ '{{ username }}' }}, {{ '{{ first_name }}' }}, {{ '{{ site_name }}' }}, {{ '{{ site_url }}' }}, {{ '{{ reset_url }}' }}, {{ '{{ plan }}' }}, {{ '{{ days_overdue }}' }}</p>
+            @verbatim
+            <p class="text-xs text-gray-500 mt-1">Variables disponibles : {{ username }}, {{ first_name }}, {{ site_name }}, {{ site_url }}, {{ reset_url }}, {{ plan }}, {{ days_overdue }}</p>
+            @endverbatim
         </div>
         <div class="mb-6">
             <label class="flex items-center gap-2"><input type="checkbox" name="is_active" value="1" {{ old('is_active', $template->is_active ?? true) ? 'checked' : '' }} class="w-4 h-4 rounded"><span class="text-sm">Actif</span></label>
