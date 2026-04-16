@@ -27,6 +27,9 @@ class AuthController extends Controller
         }
         if ($user->status === 'suspended') return back()->withErrors(['username' => 'Compte suspendu. Régularisez votre paiement.']);
         if ($user->status === 'deleted') return back()->withErrors(['username' => 'Ce compte a été supprimé.']);
+        if (!$user->is_admin && !$user->email_verified_at) {
+            return back()->withErrors(['username' => 'Confirmez votre email avant de vous connecter. Vérifiez votre boîte de réception.'])->withInput();
+        }
 
         Auth::login($user, $request->boolean('remember'));
         return redirect($user->is_admin ? '/admin' : '/portal');
@@ -63,10 +66,51 @@ class AuthController extends Controller
             }
         } catch (\Exception $e) { Log::error("Navidrome create failed: {$e->getMessage()}"); }
 
+        // Envoi du mail de confirmation (pas de sendWelcome tant que l'email n'est pas vérifié)
+        $this->sendVerificationLink($user, $mail);
+
+        // On ne connecte PAS l'utilisateur, il doit d'abord confirmer son email
+        return redirect('/login')->with('success', 'Compte créé ! Un email de confirmation vient de vous être envoyé. Cliquez sur le lien pour activer votre compte.');
+    }
+
+    private function sendVerificationLink(User $user, EmailService $mail): void
+    {
+        $token = Str::random(64);
+        \DB::table('email_verification_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            ['token' => Hash::make($token), 'created_at' => now()]
+        );
+        $url = url("/verify-email/{$token}?email=" . urlencode($user->email));
+        try { $mail->sendVerification($user, $url); } catch (\Exception $e) { Log::error("Verification mail failed: {$e->getMessage()}"); }
+    }
+
+    public function verifyEmail(string $token, Request $request, EmailService $mail)
+    {
+        $email = $request->query('email');
+        if (!$email) return redirect('/login')->withErrors(['username' => 'Lien de confirmation invalide.']);
+
+        $record = \DB::table('email_verification_tokens')->where('email', $email)->first();
+        if (!$record || !Hash::check($token, $record->token)) {
+            return redirect('/login')->withErrors(['username' => 'Lien de confirmation invalide ou expiré.']);
+        }
+
+        $user = User::where('email', $email)->first();
+        if (!$user) return redirect('/login')->withErrors(['username' => 'Compte introuvable.']);
+
+        $user->update(['email_verified_at' => now()]);
+        \DB::table('email_verification_tokens')->where('email', $email)->delete();
+
         try { $mail->sendWelcome($user); } catch (\Exception $e) {}
 
-        Auth::login($user);
-        return redirect('/portal')->with('success', 'Bienvenue ! Compte créé avec succès.');
+        return redirect('/login')->with('success', 'Email confirmé ! Vous pouvez maintenant vous connecter.');
+    }
+
+    public function resendVerification(Request $request, EmailService $mail)
+    {
+        $user = $request->user();
+        if ($user->email_verified_at) return back()->with('success', 'Votre email est déjà confirmé.');
+        $this->sendVerificationLink($user, $mail);
+        return back()->with('success', 'Email de confirmation renvoyé.');
     }
 
     public function logout(Request $request)

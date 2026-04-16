@@ -113,12 +113,42 @@ class AdminController extends Controller
     {
         $user = User::findOrFail($id);
         try { $mail->sendDeleted($user); } catch (\Exception $e) {}
-        if ($user->navidrome_id) { try { $nd->deleteUser($user->navidrome_id); } catch (\Exception $e) { Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}"); } }
+        if ($user->navidrome_id) {
+            try {
+                $nd->deleteUser($user->navidrome_id);
+                $user->navidrome_id = null; // on nettoie pour éviter toute réutilisation accidentelle
+            } catch (\Exception $e) {
+                Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}");
+            }
+        }
         foreach (Subscription::where('user_id', $id)->whereNotNull('stripe_subscription_id')->where('stripe_subscription_id', '!=', '')->get() as $sub) {
             try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
         }
-        $user->update(['status' => 'deleted']);
+        $user->status = 'deleted';
+        $user->save();
         return redirect('/admin/users')->with('success', "Utilisateur supprimé.");
+    }
+
+    /**
+     * Libère l'adresse email d'un compte supprimé pour qu'elle puisse être
+     * réutilisée à la création d'un nouveau compte. L'email original est
+     * préfixé par "released_<timestamp>_" pour rester unique et traçable.
+     */
+    public function userReleaseEmail(string $id)
+    {
+        $user = User::findOrFail($id);
+        if ($user->status !== 'deleted') {
+            return back()->with('error', 'On ne libère l\'email que pour un compte supprimé.');
+        }
+        if (str_starts_with($user->email, 'released_')) {
+            return back()->with('error', 'L\'email de ce compte a déjà été libéré.');
+        }
+        $originalEmail = $user->email;
+        $user->email = 'released_' . now()->timestamp . '_' . $originalEmail;
+        // on libère aussi le username pour la même raison
+        $user->username = 'released_' . now()->timestamp . '_' . $user->username;
+        $user->save();
+        return back()->with('success', "Email {$originalEmail} libéré — il peut maintenant être réutilisé.");
     }
 
     public function walletAdjust(string $userId, Request $request)

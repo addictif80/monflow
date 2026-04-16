@@ -10,4 +10,8 @@ return [
         'suspend_delay_days' => (int) env('SUSPEND_DELAY_DAYS', 7),
         'delete_delay_days' => (int) env('DELETE_DELAY_DAYS', 30),
     ],
+    'deemix' => [
+        'url' => rtrim(env('DEEMIX_URL', 'https://deemix.monflow.fr'), '/'),
+        'verify_ssl' => (bool) env('DEEMIX_VERIFY_SSL', true),
+    ],
 ];

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{User, Payment, Subscription, Plan, Wallet, WalletTransaction};
+use App\Models\{User, Payment, Subscription, Plan, PromoCode, Wallet, WalletTransaction};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log, Hash};
@@ -42,7 +42,35 @@ class PaymentController extends Controller
         $type = $meta['type'] ?? 'subscription';
         $amount = ($session->amount_total ?? 0) / 100;
 
-        if ($type === 'wallet_topup') {
+        if ($type === 'prepay') {
+            $plan = Plan::find($meta['plan_id'] ?? '');
+            $months = (int) ($meta['months'] ?? 1);
+            if (!$plan) return;
+            $days = $plan->period_days * max(1, $months);
+
+            // Prolonge un abonnement existant (active/pending) ou en crée un nouveau
+            $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
+            $start = now();
+            $end = ($sub && $sub->current_period_end && $sub->current_period_end->isFuture())
+                ? $sub->current_period_end->copy()->addDays($days)
+                : now()->addDays($days);
+
+            if ($sub) {
+                $sub->update(['plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $sub->current_period_start ?? $start, 'current_period_end' => $end]);
+            } else {
+                $sub = Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $start, 'current_period_end' => $end]);
+            }
+
+            Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => "{$plan->name} — {$months} mois prépayés"]);
+
+            if ($user->status === 'suspended') $user->update(['status' => 'active']);
+            if ($user->navidrome_id) {
+                $originalPassword = $user->getDecryptedPassword();
+                if ($originalPassword) {
+                    try { $nd->reactivateUser($user->navidrome_id, $originalPassword); } catch (\Exception $e) { Log::error($e->getMessage()); }
+                }
+            }
+        } elseif ($type === 'wallet_topup') {
             $wallet = Wallet::firstOrCreate(['user_id' => $user->id]);
             DB::transaction(function () use ($wallet, $amount, $session) {
                 $wallet = Wallet::lockForUpdate()->find($wallet->id);

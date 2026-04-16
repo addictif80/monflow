@@ -29,6 +29,13 @@
                 @csrf
                 <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium transition">Supprimer</button>
             </form>
+        @else
+            @if(!str_starts_with($user->email, 'released_'))
+                <form method="POST" action="/admin/users/{{ $user->id }}/release-email" onsubmit="return confirm('Libérer {{ $user->email }} ? Cette adresse pourra être réutilisée par un autre compte.')">
+                    @csrf
+                    <button type="submit" class="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg text-sm font-medium transition">Libérer l'email</button>
+                </form>
+            @endif
         @endif
     </div>
 </div>

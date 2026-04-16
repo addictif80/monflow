@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\TicketController;
+use App\Http\Controllers\Portal\DeemixProxyController;
 use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,10 @@ Route::middleware('guest')->group(function () {
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
+// ─── Email verification (public, token-based) ───
+Route::get('/verify-email/{token}', [AuthController::class, 'verifyEmail'])->name('verify.email');
+Route::post('/verify-email/resend', [AuthController::class, 'resendVerification'])->middleware('auth')->name('verify.resend');
+
 // ─── Stripe Webhook (no auth, no CSRF) ───
 Route::post('/stripe/webhook', [PaymentController::class, 'stripeWebhook'])->name('stripe.webhook');
 
@@ -33,6 +38,7 @@ Route::middleware('auth')->group(function () {
     Route::match(['get', 'post'], '/portal/change-password', [DashboardController::class, 'changePassword']);
     Route::get('/portal/plans', [DashboardController::class, 'plans']);
     Route::get('/portal/subscribe/{plan}', [DashboardController::class, 'subscribe']);
+    Route::post('/portal/resume-payment', [DashboardController::class, 'resumePayment']);
     Route::post('/portal/cancel-subscription', [DashboardController::class, 'cancelSubscription']);
     Route::get('/portal/wallet', [DashboardController::class, 'wallet']);
     Route::post('/portal/wallet/topup', [DashboardController::class, 'walletTopup']);
@@ -45,6 +51,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/payments/success', [PaymentController::class, 'success']);
     Route::get('/payments/wallet-success', [PaymentController::class, 'walletSuccess']);
     Route::get('/payments/gift-success', [PaymentController::class, 'giftSuccess']);
+
+    // Deemix integration (reverse proxy, tout est sous /portal/deemix)
+    Route::any('/portal/deemix', [DeemixProxyController::class, 'handle']);
+    Route::any('/portal/deemix/{any?}', [DeemixProxyController::class, 'handle'])->where('any', '.*');
 
     // Support tickets
     Route::get('/support/tickets', [TicketController::class, 'index']);
@@ -83,6 +93,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/users/{id}/suspend', [AdminController::class, 'userSuspend']);
     Route::post('/users/{id}/reactivate', [AdminController::class, 'userReactivate']);
     Route::post('/users/{id}/delete', [AdminController::class, 'userDelete']);
+    Route::post('/users/{id}/release-email', [AdminController::class, 'userReleaseEmail']);
     Route::post('/users/{id}/wallet-adjust', [AdminController::class, 'walletAdjust']);
 
     // Plans

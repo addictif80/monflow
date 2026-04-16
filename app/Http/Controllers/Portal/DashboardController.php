@@ -13,8 +13,10 @@ class DashboardController extends Controller
     public function index()
     {
         $user = Auth::user();
+        $pendingSub = Subscription::where('user_id', $user->id)->where('status', 'pending')->with('plan')->latest()->first();
         return view('portal.dashboard', [
             'activeSub' => $user->activeSubscription?->load('plan'),
+            'pendingSub' => $pendingSub,
             'wallet' => $user->wallet,
             'recentPayments' => Payment::where('user_id', $user->id)->latest()->take(5)->get(),
         ]);
@@ -64,10 +66,9 @@ class DashboardController extends Controller
         $user = Auth::user();
         if ($user->activeSubscription) return redirect('/portal')->with('error', 'Vous avez déjà un abonnement actif.');
 
-        if (!$plan->stripe_price_id || !str_starts_with($plan->stripe_price_id, 'price_')) {
-            Log::error("Plan {$plan->id} ({$plan->name}) has an invalid stripe_price_id: " . ($plan->stripe_price_id ?? 'null'));
-            return redirect('/portal/plans')->with('error', 'Cette formule est mal configurée (Stripe Price ID manquant ou invalide). Merci de contacter le support.');
-        }
+        // Durée de prépaiement (1 = abonnement récurrent standard, 3/6/12 = paiement unique prépayé)
+        $months = (int) $request->input('months', 1);
+        if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
 
         $promo = null;
         if ($code = $request->query('promo')) {
@@ -75,16 +76,71 @@ class DashboardController extends Controller
             if ($promo && !$promo->is_valid) $promo = null;
         }
 
+        if ($months === 1) {
+            // Abonnement récurrent classique via Stripe Subscription
+            if (!$plan->stripe_price_id || !str_starts_with($plan->stripe_price_id, 'price_')) {
+                Log::error("Plan {$plan->id} ({$plan->name}) has an invalid stripe_price_id: " . ($plan->stripe_price_id ?? 'null'));
+                return redirect('/portal/plans')->with('error', 'Cette formule est mal configurée (Stripe Price ID manquant ou invalide). Merci de contacter le support.');
+            }
+
+            try {
+                $session = $stripe->createCheckoutSession($user, $plan,
+                    url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
+                    url('/portal/plans'));
+            } catch (\Exception $e) {
+                Log::error("Stripe checkout failed for user {$user->id} plan {$plan->id}: {$e->getMessage()}");
+                return redirect('/portal/plans')->with('error', 'Impossible de démarrer le paiement. Merci de réessayer ou de contacter le support.');
+            }
+
+            // Supprimer les pending orphelins puis créer le nouveau pending
+            Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
+            Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
+            return redirect($session->url);
+        }
+
+        // Paiement unique pour N mois d'avance (pas de Stripe Subscription, juste un one-shot)
         try {
-            $session = $stripe->createCheckoutSession($user, $plan,
+            $session = $stripe->createPrepaySession($user, $plan, $months,
                 url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
                 url('/portal/plans'));
         } catch (\Exception $e) {
-            Log::error("Stripe checkout failed for user {$user->id} plan {$plan->id}: {$e->getMessage()}");
+            Log::error("Stripe prepay checkout failed for user {$user->id} plan {$plan->id}: {$e->getMessage()}");
             return redirect('/portal/plans')->with('error', 'Impossible de démarrer le paiement. Merci de réessayer ou de contacter le support.');
         }
 
+        Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
         Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
+        return redirect($session->url);
+    }
+
+    public function resumePayment(Request $request, StripeService $stripe)
+    {
+        $user = Auth::user();
+        $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->with('plan')->latest()->first();
+        if (!$sub) return redirect('/portal')->with('error', 'Aucun paiement en attente.');
+        if ($user->activeSubscription) return redirect('/portal')->with('error', 'Vous avez déjà un abonnement actif.');
+
+        $months = (int) $request->input('months', 1);
+        if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
+
+        try {
+            if ($months === 1) {
+                if (!$sub->plan->stripe_price_id || !str_starts_with($sub->plan->stripe_price_id, 'price_')) {
+                    return redirect('/portal/plans')->with('error', 'Formule mal configurée. Contactez le support.');
+                }
+                $session = $stripe->createCheckoutSession($user, $sub->plan,
+                    url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
+                    url('/portal'));
+            } else {
+                $session = $stripe->createPrepaySession($user, $sub->plan, $months,
+                    url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
+                    url('/portal'));
+            }
+        } catch (\Exception $e) {
+            Log::error("Stripe resume failed for user {$user->id}: {$e->getMessage()}");
+            return redirect('/portal')->with('error', 'Impossible de reprendre le paiement. Merci de réessayer.');
+        }
+
         return redirect($session->url);
     }
 

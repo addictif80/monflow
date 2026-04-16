@@ -58,26 +58,46 @@
                     Abonnement déjà actif
                 </button>
             @else
-                <a href="/portal/subscribe/{{ $plan->id }}" class="subscribe-link w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition text-center block"
-                   data-base-url="/portal/subscribe/{{ $plan->id }}">
-                    S'abonner
-                </a>
+                <div class="space-y-2">
+                    <label class="block text-xs text-gray-400">Durée du paiement</label>
+                    <select class="prepay-duration w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm" data-plan="{{ $plan->id }}">
+                        <option value="1">1 mois — {{ number_format($plan->price, 2, ',', ' ') }} € (récurrent)</option>
+                        <option value="3">3 mois — {{ number_format($plan->price * 3, 2, ',', ' ') }} € (prépayé)</option>
+                        <option value="6">6 mois — {{ number_format($plan->price * 6, 2, ',', ' ') }} € (prépayé)</option>
+                        <option value="12">12 mois — {{ number_format($plan->price * 12, 2, ',', ' ') }} € (prépayé)</option>
+                    </select>
+                    <a href="/portal/subscribe/{{ $plan->id }}" class="subscribe-link w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition text-center block"
+                       data-base-url="/portal/subscribe/{{ $plan->id }}" data-plan="{{ $plan->id }}">
+                        S'abonner
+                    </a>
+                </div>
             @endif
         </div>
     @endforeach
 </div>
 
 <script>
-    function applyPromo() {
+    function buildUrl(link) {
+        const baseUrl = link.getAttribute('data-base-url');
+        const plan = link.getAttribute('data-plan');
         const code = document.getElementById('promo_code').value.trim();
-        document.querySelectorAll('.subscribe-link').forEach(function(link) {
-            const baseUrl = link.getAttribute('data-base-url');
-            if (code) {
-                link.href = baseUrl + '?promo=' + encodeURIComponent(code);
-            } else {
-                link.href = baseUrl;
-            }
-        });
+        const sel = document.querySelector('.prepay-duration[data-plan="' + plan + '"]');
+        const months = sel ? sel.value : '1';
+        const params = new URLSearchParams();
+        if (months && months !== '1') params.set('months', months);
+        if (code) params.set('promo', code);
+        const qs = params.toString();
+        link.href = baseUrl + (qs ? '?' + qs : '');
     }
+    function applyPromo() {
+        document.querySelectorAll('.subscribe-link').forEach(buildUrl);
+    }
+    document.querySelectorAll('.prepay-duration').forEach(function(sel) {
+        sel.addEventListener('change', function() {
+            const plan = sel.getAttribute('data-plan');
+            const link = document.querySelector('.subscribe-link[data-plan="' + plan + '"]');
+            if (link) buildUrl(link);
+        });
+    });
 </script>
 @endsection

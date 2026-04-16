@@ -40,6 +40,28 @@ class StripeService
         ]);
     }
 
+    public function createPrepaySession(User $user, \App\Models\Plan $plan, int $months, string $successUrl, string $cancelUrl): Session
+    {
+        $customer = $this->getOrCreateCustomer($user);
+        $amountCents = (int) round($plan->price * 100 * $months);
+        return Session::create([
+            'customer' => $customer->id,
+            'payment_method_types' => ['card'],
+            'mode' => 'payment',
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => 'eur',
+                    'unit_amount' => $amountCents,
+                    'product_data' => ['name' => "{$plan->name} — {$months} mois prépayés"],
+                ],
+                'quantity' => 1,
+            ]],
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+            'metadata' => ['user_id' => $user->id, 'plan_id' => $plan->id, 'type' => 'prepay', 'months' => $months],
+        ]);
+    }
+
     public function createWalletTopupSession(User $user, int $amountCents, string $successUrl, string $cancelUrl): Session
     {
         $customer = $this->getOrCreateCustomer($user);
