@@ -10,6 +10,8 @@ class UserCreateRequest extends FormRequest
 
     public function rules(): array
     {
+        if ($this->isMethod('get')) return [];
+
         return [
             'username' => 'required|unique:users|min:3|max:50',
             'email' => 'required|email|unique:users',

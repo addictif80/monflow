@@ -10,6 +10,8 @@ class UserEditRequest extends FormRequest
 
     public function rules(): array
     {
+        if ($this->isMethod('get')) return [];
+
         $id = $this->route('id');
         return [
             'username' => "required|unique:users,username,{$id}|min:3|max:50",

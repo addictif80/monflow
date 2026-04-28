@@ -10,6 +10,8 @@ class PlanRequest extends FormRequest
 
     public function rules(): array
     {
+        if ($this->isMethod('get')) return [];
+
         return [
             'name' => 'required|max:100',
             'description' => 'nullable|max:500',

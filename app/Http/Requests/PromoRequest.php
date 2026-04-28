@@ -10,6 +10,8 @@ class PromoRequest extends FormRequest
 
     public function rules(): array
     {
+        if ($this->isMethod('get')) return [];
+
         $id = $this->route('id');
         return [
             'code' => 'required|unique:promo_codes,code' . ($id ? ",{$id}" : ''),
