@@ -130,6 +130,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Subscriptions
     Route::get('/subscriptions', [AdminController::class, 'subscriptions']);
+    Route::get('/subscriptions/{id}', [AdminController::class, 'subscriptionDetail']);
+    Route::post('/subscriptions/{id}/extend', [AdminController::class, 'subscriptionExtend']);
+    Route::post('/subscriptions/{id}/cancel', [AdminController::class, 'subscriptionCancel']);
+    Route::post('/subscriptions/{id}/change-plan', [AdminController::class, 'subscriptionChangePlan']);
+    Route::post('/subscriptions/create', [AdminController::class, 'subscriptionCreate']);
 
     // Tickets
     Route::get('/tickets', [AdminController::class, 'tickets']);

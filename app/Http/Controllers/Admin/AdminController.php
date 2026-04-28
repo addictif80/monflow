@@ -259,7 +259,84 @@ class AdminController extends Controller
     }
 
     // ─── Subscriptions ───
-    public function subscriptions() { return view('admin.subscriptions.list', ['subscriptions' => Subscription::with('user', 'plan')->latest()->paginate(25)]); }
+    public function subscriptions(Request $request)
+    {
+        $q = Subscription::with('user', 'plan')->latest();
+        if ($status = $request->input('status')) $q->where('status', $status);
+        return view('admin.subscriptions.list', ['subscriptions' => $q->paginate(25), 'statusFilter' => $status ?? '']);
+    }
+
+    public function subscriptionDetail(string $id)
+    {
+        $sub = Subscription::with('user', 'plan', 'payments')->findOrFail($id);
+        return view('admin.subscriptions.detail', ['sub' => $sub, 'plans' => Plan::where('is_active', true)->orderBy('sort_order')->get()]);
+    }
+
+    public function subscriptionExtend(string $id, Request $request)
+    {
+        $sub = Subscription::findOrFail($id);
+        $days = (int) $request->input('days', 30);
+        if ($days < 1) return back()->with('error', 'Nombre de jours invalide.');
+
+        $base = ($sub->current_period_end && $sub->current_period_end->isFuture()) ? $sub->current_period_end : now();
+        $sub->update([
+            'current_period_end' => $base->copy()->addDays($days),
+            'status' => 'active',
+        ]);
+        AuditLog::record('subscription.extend', $sub, ['days' => $days]);
+        return back()->with('success', "Abonnement prolongé de {$days} jours.");
+    }
+
+    public function subscriptionCancel(string $id, StripeService $stripe)
+    {
+        $sub = Subscription::findOrFail($id);
+        if ($sub->stripe_subscription_id) {
+            try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
+        }
+        $sub->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+        AuditLog::record('subscription.cancel', $sub);
+        return back()->with('success', 'Abonnement résilié.');
+    }
+
+    public function subscriptionChangePlan(string $id, Request $request)
+    {
+        $sub = Subscription::findOrFail($id);
+        $plan = Plan::findOrFail($request->input('plan_id'));
+        $sub->update(['plan_id' => $plan->id]);
+        AuditLog::record('subscription.change_plan', $sub, ['new_plan' => $plan->name]);
+        return back()->with('success', "Formule changée en {$plan->name}.");
+    }
+
+    public function subscriptionCreate(Request $request, NavidromeService $nd)
+    {
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'plan_id' => 'required|exists:plans,id',
+            'months' => 'required|integer|min:1|max:24',
+        ]);
+        $user = User::findOrFail($data['user_id']);
+        $plan = Plan::findOrFail($data['plan_id']);
+        $days = $plan->period_days * $data['months'];
+
+        if ($user->activeSubscription) return back()->with('error', 'Cet utilisateur a déjà un abonnement actif.');
+
+        $sub = Subscription::create([
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'current_period_start' => now(),
+            'current_period_end' => now()->addDays($days),
+        ]);
+
+        if ($user->status === 'suspended') $user->update(['status' => 'active']);
+        if ($user->navidrome_id) {
+            $pw = $user->getDecryptedPassword();
+            if ($pw) { try { $nd->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) { Log::error($e->getMessage()); } }
+        }
+
+        AuditLog::record('subscription.create', $sub, ['plan' => $plan->name, 'months' => $data['months']]);
+        return redirect("/admin/subscriptions")->with('success', "Abonnement {$plan->name} créé pour {$user->username} ({$data['months']} mois).");
+    }
 
     // ─── Tickets ───
     public function tickets(Request $request)
