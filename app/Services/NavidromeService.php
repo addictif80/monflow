@@ -166,6 +166,11 @@ class NavidromeService
         return $this->request('get', "/user/{$navidromeId}");
     }
 
+    public function listUsers(): array
+    {
+        return $this->request('get', '/user?_end=10000&_order=ASC&_sort=userName&_start=0');
+    }
+
     public function testConnection(): array
     {
         try {
