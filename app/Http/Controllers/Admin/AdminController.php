@@ -298,6 +298,25 @@ class AdminController extends Controller
         return back()->with('success', 'Abonnement résilié.');
     }
 
+    public function subscriptionUpdateDates(string $id, Request $request)
+    {
+        $data = $request->validate([
+            'current_period_start' => 'required|date',
+            'current_period_end' => 'required|date|after:current_period_start',
+        ]);
+        $sub = Subscription::findOrFail($id);
+        $old = [
+            'start' => $sub->current_period_start?->toDateTimeString(),
+            'end' => $sub->current_period_end?->toDateTimeString(),
+        ];
+        $sub->update([
+            'current_period_start' => $data['current_period_start'],
+            'current_period_end' => $data['current_period_end'],
+        ]);
+        AuditLog::record('subscription.update_dates', $sub, ['old' => $old, 'new' => $data]);
+        return back()->with('success', 'Dates mises à jour.');
+    }
+
     public function subscriptionChangePlan(string $id, Request $request)
     {
         $sub = Subscription::findOrFail($id);

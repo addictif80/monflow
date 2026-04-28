@@ -66,6 +66,25 @@
             </form>
         </div>
 
+        {{-- Update dates --}}
+        <div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
+            <h3 class="font-semibold mb-3">Modifier les dates</h3>
+            <form action="/admin/subscriptions/{{ $sub->id }}/update-dates" method="POST" class="grid grid-cols-2 gap-3 items-end">
+                @csrf
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Début période</label>
+                    <input type="datetime-local" name="current_period_start" value="{{ $sub->current_period_start?->format('Y-m-d\TH:i') }}" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Fin période</label>
+                    <input type="datetime-local" name="current_period_end" value="{{ $sub->current_period_end?->format('Y-m-d\TH:i') }}" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                </div>
+                <div class="col-span-2">
+                    <button type="submit" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-sm font-medium transition">Mettre à jour</button>
+                </div>
+            </form>
+        </div>
+
         {{-- Change plan --}}
         <div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
             <h3 class="font-semibold mb-3">Changer de formule</h3>
