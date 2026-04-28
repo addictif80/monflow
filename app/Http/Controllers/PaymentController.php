@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{User, Payment, Subscription, Plan, PromoCode, Wallet, WalletTransaction};
+use App\Models\{User, Payment, Subscription, Plan, PromoCode, Wallet, WalletTransaction, Notification};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log, Hash};
@@ -62,6 +62,7 @@ class PaymentController extends Controller
             }
 
             Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => "{$plan->name} — {$months} mois prépayés"]);
+            Notification::push($user->id, 'payment_success', 'Paiement confirmé', "{$plan->name} — {$months} mois prépayés ({$amount}€)", '/portal');
 
             if ($user->status === 'suspended') $user->update(['status' => 'active']);
             if ($user->navidrome_id) {
@@ -78,6 +79,7 @@ class PaymentController extends Controller
                 WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'topup', 'amount' => $amount, 'description' => 'Rechargement Stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '']);
             });
             Payment::create(['user_id' => $user->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => 'Rechargement portefeuille']);
+            Notification::push($user->id, 'payment_success', 'Portefeuille rechargé', "Rechargement de {$amount}€ effectué.", '/portal/wallet');
         } elseif ($type === 'gift') {
             $plan = Plan::find($meta['plan_id'] ?? '');
             $recipientEmail = $meta['recipient_email'] ?? '';
@@ -105,6 +107,7 @@ class PaymentController extends Controller
                 if ($sub->promo_code_id) PromoCode::where('id', $sub->promo_code_id)->increment('current_uses');
             }
             Payment::create(['user_id' => $user->id, 'subscription_id' => $sub?->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => 'Abonnement ' . ($sub?->plan?->name ?? '')]);
+            Notification::push($user->id, 'payment_success', 'Abonnement activé', 'Votre abonnement ' . ($sub?->plan?->name ?? '') . " est maintenant actif.", '/portal');
 
             // Si suspendu (impayé), on remet le statut user/sub en actif
             if ($user->status === 'suspended') {
@@ -129,12 +132,15 @@ class PaymentController extends Controller
         if ($sub) { $sub->update(['current_period_start' => now(), 'current_period_end' => now()->addDays($sub->plan->period_days)]); }
         $amount = ($invoice->amount_paid ?? 0) / 100;
         Payment::create(['user_id' => $user->id, 'subscription_id' => $sub?->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_invoice_id' => $invoice->id ?? '', 'description' => 'Renouvellement']);
+        Notification::push($user->id, 'subscription_renewed', 'Abonnement renouvelé', "Votre abonnement a été renouvelé ({$amount}€).", '/portal');
     }
 
     private function handleInvoiceFailed($invoice): void
     {
         $user = User::where('stripe_customer_id', $invoice->customer)->first();
         if (!$user) return;
-        Payment::create(['user_id' => $user->id, 'amount' => ($invoice->amount_due ?? 0) / 100, 'status' => 'failed', 'payment_method' => 'stripe', 'stripe_invoice_id' => $invoice->id ?? '', 'description' => 'Échec paiement']);
+        $amount = ($invoice->amount_due ?? 0) / 100;
+        Payment::create(['user_id' => $user->id, 'amount' => $amount, 'status' => 'failed', 'payment_method' => 'stripe', 'stripe_invoice_id' => $invoice->id ?? '', 'description' => 'Échec paiement']);
+        Notification::push($user->id, 'payment_failed', 'Échec de paiement', "Le prélèvement de {$amount}€ a échoué. Veuillez régulariser.", '/portal/plans');
     }
 }

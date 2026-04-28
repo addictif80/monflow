@@ -19,13 +19,13 @@ Route::get('/', function () {
 // ─── Auth ───
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword']);
-    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:password-reset');
     Route::get('/reset-password/{token}', [AuthController::class, 'showResetPassword']);
-    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth');
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
@@ -58,13 +58,25 @@ Route::middleware('auth')->group(function () {
     Route::get('/payments/gift-success', [PaymentController::class, 'giftSuccess']);
 
     // Deemix integration (reverse proxy, tout est sous /portal/deemix)
-    Route::any('/portal/deemix', [DeemixProxyController::class, 'handle']);
-    Route::any('/portal/deemix/{any?}', [DeemixProxyController::class, 'handle'])->where('any', '.*');
+    Route::middleware('subscribed')->group(function () {
+        Route::any('/portal/deemix', [DeemixProxyController::class, 'handle']);
+        Route::any('/portal/deemix/{any?}', [DeemixProxyController::class, 'handle'])->where('any', '.*');
+    });
 
     // Support tickets
     Route::get('/support/tickets', [TicketController::class, 'index']);
     Route::match(['get', 'post'], '/support/tickets/create', [TicketController::class, 'create']);
     Route::match(['get', 'post'], '/support/tickets/{ticket}', [TicketController::class, 'show']);
+
+    // Wallet payment for subscription
+    Route::post('/portal/wallet-pay', [DashboardController::class, 'walletPay']);
+
+    // Notifications
+    Route::get('/portal/notifications', [DashboardController::class, 'notifications']);
+    Route::post('/portal/notifications/read', [DashboardController::class, 'markNotificationsRead']);
+
+    // Invoice PDF
+    Route::get('/portal/payments/{id}/invoice', [DashboardController::class, 'invoice']);
 
     // Web player — réservé aux abonnés actifs (et admins)
     Route::get('/player', function () {
@@ -122,6 +134,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     // Tickets
     Route::get('/tickets', [AdminController::class, 'tickets']);
     Route::match(['get', 'post'], '/tickets/{id}', [AdminController::class, 'ticketDetail']);
+
+    // Audit logs
+    Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
 
     // Settings
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);

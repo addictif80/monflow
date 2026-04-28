@@ -2,8 +2,9 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Blade;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -16,5 +17,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         \Stripe\Stripe::setApiKey(config('services.stripe.secret_key'));
+
+        RateLimiter::for('auth', fn ($request) => Limit::perMinute(5)->by($request->ip()));
+        RateLimiter::for('password-reset', fn ($request) => Limit::perMinute(3)->by($request->ip()));
     }
 }

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Payment, Subscription, Wallet, WalletTransaction, UserDevice, Plan, PromoCode};
+use App\Models\{Payment, Subscription, Wallet, WalletTransaction, UserDevice, Plan, PromoCode, Notification};
 use App\Services\{NavidromeService, StripeService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Hash, Log, DB};
@@ -19,6 +19,7 @@ class DashboardController extends Controller
             'pendingSub' => $pendingSub,
             'wallet' => $user->wallet,
             'recentPayments' => Payment::where('user_id', $user->id)->latest()->take(5)->get(),
+            'unreadNotifications' => Notification::where('user_id', $user->id)->unread()->count(),
         ]);
     }
 
@@ -200,5 +201,72 @@ class DashboardController extends Controller
     public function payments()
     {
         return view('portal.payments', ['payments' => Payment::where('user_id', Auth::id())->latest()->paginate(20)]);
+    }
+
+    public function walletPay(Request $request, NavidromeService $nd)
+    {
+        $user = Auth::user();
+        if ($user->activeSubscription) return redirect('/portal')->with('error', 'Vous avez déjà un abonnement actif.');
+
+        $plan = Plan::where('is_active', true)->findOrFail($request->input('plan_id'));
+        $months = (int) $request->input('months', 1);
+        if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
+
+        $total = $plan->price * $months;
+        $wallet = $user->wallet ?? Wallet::create(['user_id' => $user->id]);
+
+        if ($wallet->balance < $total) {
+            return back()->with('error', "Solde insuffisant ({$wallet->balance}€). Rechargez votre portefeuille.");
+        }
+
+        DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd) {
+            $wallet = Wallet::lockForUpdate()->find($wallet->id);
+            $wallet->decrement('balance', $total);
+            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'subscription', 'amount' => -$total, 'description' => "{$plan->name} — {$months} mois"]);
+
+            $days = $plan->period_days * $months;
+            $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
+            $end = ($sub && $sub->current_period_end && $sub->current_period_end->isFuture())
+                ? $sub->current_period_end->copy()->addDays($days)
+                : now()->addDays($days);
+
+            if ($sub) {
+                $sub->update(['plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $sub->current_period_start ?? now(), 'current_period_end' => $end]);
+            } else {
+                $sub = Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => now(), 'current_period_end' => $end]);
+            }
+
+            Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $total, 'stripe_amount' => 0, 'status' => 'succeeded', 'payment_method' => 'wallet', 'description' => "{$plan->name} — {$months} mois (portefeuille)"]);
+
+            Notification::push($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
+
+            if ($user->status === 'suspended') $user->update(['status' => 'active']);
+            if ($user->navidrome_id) {
+                $pw = $user->getDecryptedPassword();
+                if ($pw) { try { $nd->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) { Log::error($e->getMessage()); } }
+            }
+        });
+
+        Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
+
+        return redirect('/portal')->with('success', "Abonnement {$plan->name} activé pour {$months} mois.");
+    }
+
+    public function notifications()
+    {
+        $notifications = Notification::where('user_id', Auth::id())->latest()->paginate(30);
+        return view('portal.notifications', compact('notifications'));
+    }
+
+    public function markNotificationsRead()
+    {
+        Notification::where('user_id', Auth::id())->unread()->update(['read_at' => now()]);
+        return back()->with('success', 'Notifications marquées comme lues.');
+    }
+
+    public function invoice(string $id)
+    {
+        $payment = Payment::where('user_id', Auth::id())->findOrFail($id);
+        return view('portal.invoice', ['payment' => $payment, 'user' => Auth::user()]);
     }
 }

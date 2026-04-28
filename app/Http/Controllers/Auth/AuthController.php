@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet};
+use App\Http\Requests\{LoginRequest, RegisterRequest};
+use App\Models\{User, Wallet, Notification};
 use App\Services\{NavidromeService, EmailService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Hash, Password, Log};
@@ -17,9 +18,9 @@ class AuthController extends Controller
         return view('auth.login');
     }
 
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $creds = $request->validate(['username' => 'required', 'password' => 'required']);
+        $creds = $request->validated();
         $user = User::where('username', $creds['username'])->orWhere('email', $creds['username'])->first();
 
         if (!$user || !Hash::check($creds['password'], $user->password)) {
@@ -37,15 +38,9 @@ class AuthController extends Controller
 
     public function showRegister() { return view('auth.register'); }
 
-    public function register(Request $request, NavidromeService $nd, EmailService $mail)
+    public function register(RegisterRequest $request, NavidromeService $nd, EmailService $mail)
     {
-        $data = $request->validate([
-            'username' => 'required|unique:users|min:3|max:50',
-            'email' => 'required|email|unique:users',
-            'first_name' => 'nullable|max:100',
-            'last_name' => 'nullable|max:100',
-            'password' => 'required|min:6|confirmed',
-        ]);
+        $data = $request->validated();
 
         $user = User::create([
             'username' => $data['username'],
@@ -101,6 +96,7 @@ class AuthController extends Controller
         \DB::table('email_verification_tokens')->where('email', $email)->delete();
 
         try { $mail->sendWelcome($user); } catch (\Exception $e) {}
+        Notification::push($user->id, 'welcome', 'Bienvenue sur MonFlow !', 'Votre compte est activé. Choisissez une formule pour commencer.', '/portal/plans');
 
         return redirect('/login')->with('success', 'Email confirmé ! Vous pouvez maintenant vous connecter.');
     }

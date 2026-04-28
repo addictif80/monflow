@@ -70,6 +70,14 @@
                        data-base-url="/portal/subscribe/{{ $plan->id }}" data-plan="{{ $plan->id }}">
                         S'abonner
                     </a>
+                    <form action="/portal/wallet-pay" method="POST" class="mt-2">
+                        @csrf
+                        <input type="hidden" name="plan_id" value="{{ $plan->id }}">
+                        <input type="hidden" name="months" value="1" class="wallet-months" data-plan="{{ $plan->id }}">
+                        <button type="submit" class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition text-center">
+                            Payer avec le portefeuille
+                        </button>
+                    </form>
                 </div>
             @endif
         </div>
@@ -97,6 +105,8 @@
             const plan = sel.getAttribute('data-plan');
             const link = document.querySelector('.subscribe-link[data-plan="' + plan + '"]');
             if (link) buildUrl(link);
+            var walletInput = document.querySelector('.wallet-months[data-plan="' + plan + '"]');
+            if (walletInput) walletInput.value = sel.value;
         });
     });
 </script>

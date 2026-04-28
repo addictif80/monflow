@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate};
+use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification};
+use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Hash, DB, Log};
@@ -13,15 +14,26 @@ class AdminController extends Controller
     // ─── Dashboard ───
     public function dashboard()
     {
+        $now = now();
+        $lastMonth = now()->subMonth();
         return view('admin.dashboard', [
             'totalUsers' => User::where('is_admin', false)->count(),
             'activeUsers' => User::where('status', 'active')->where('is_admin', false)->count(),
             'suspendedUsers' => User::where('status', 'suspended')->count(),
+            'deletedUsers' => User::where('status', 'deleted')->count(),
             'activeSubs' => Subscription::where('status', 'active')->count(),
-            'revenueMonth' => Payment::where('status', 'succeeded')->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount'),
+            'revenueMonth' => Payment::where('status', 'succeeded')->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('amount'),
+            'revenueLastMonth' => Payment::where('status', 'succeeded')->whereMonth('created_at', $lastMonth->month)->whereYear('created_at', $lastMonth->year)->sum('amount'),
+            'newUsersMonth' => User::where('is_admin', false)->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(),
+            'churnMonth' => Subscription::where('status', 'cancelled')->whereMonth('cancelled_at', $now->month)->whereYear('cancelled_at', $now->year)->count(),
+            'expiringSoon' => Subscription::where('status', 'active')->where('current_period_end', '<=', now()->addDays(7))->where('current_period_end', '>', now())->count(),
             'openTickets' => Ticket::whereIn('status', ['open', 'in_progress'])->count(),
             'recentPayments' => Payment::with('user')->latest()->take(10)->get(),
             'recentTickets' => Ticket::with('user')->latest()->take(5)->get(),
+            'monthlyRevenue' => Payment::where('status', 'succeeded')
+                ->where('created_at', '>=', now()->subMonths(6)->startOfMonth())
+                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, SUM(amount) as total")
+                ->groupBy('month')->orderBy('month')->pluck('total', 'month'),
         ]);
     }
 
@@ -34,10 +46,10 @@ class AdminController extends Controller
         return view('admin.users.list', ['users' => $q->latest()->paginate(25), 'status' => $s, 'search' => $search]);
     }
 
-    public function userCreate(Request $request, NavidromeService $nd, EmailService $mail)
+    public function userCreate(UserCreateRequest $request, NavidromeService $nd, EmailService $mail)
     {
         if ($request->isMethod('post')) {
-            $data = $request->validate(['username' => 'required|unique:users', 'email' => 'required|email|unique:users', 'first_name' => 'nullable', 'last_name' => 'nullable', 'phone' => 'nullable', 'password' => 'required|min:6', 'is_admin' => 'nullable']);
+            $data = $request->validated();
             $user = User::create([...$data, 'password' => Hash::make($data['password']), 'is_admin' => (bool)($data['is_admin'] ?? false)]);
             $user->storeEncryptedPassword($data['password']);
             Wallet::create(['user_id' => $user->id]);
@@ -50,16 +62,17 @@ class AdminController extends Controller
                 }
             } catch (\Exception $e) { Log::error($e->getMessage()); }
             try { $mail->sendWelcome($user); } catch (\Exception $e) {}
+            AuditLog::record('user.create', $user);
             return redirect('/admin/users')->with('success', "Utilisateur {$user->username} créé.");
         }
         return view('admin.users.form', ['title' => 'Nouvel utilisateur', 'user' => null]);
     }
 
-    public function userEdit(string $id, Request $request, NavidromeService $nd)
+    public function userEdit(string $id, UserEditRequest $request, NavidromeService $nd)
     {
         $user = User::findOrFail($id);
         if ($request->isMethod('post')) {
-            $data = $request->validate(['username' => "required|unique:users,username,{$id}", 'email' => "required|email|unique:users,email,{$id}", 'first_name' => 'nullable', 'last_name' => 'nullable', 'phone' => 'nullable', 'status' => 'required', 'password' => 'nullable|min:6', 'is_admin' => 'nullable']);
+            $data = $request->validated();
             $plainPassword = $data['password'] ?? null;
             unset($data['password']); // Ne jamais fill le password depuis $data (évite d'écraser avec null)
             $user->fill($data);
@@ -70,6 +83,7 @@ class AdminController extends Controller
                 if ($user->navidrome_id) { try { $nd->changePassword($user->navidrome_id, $plainPassword); } catch (\Exception $e) {} }
             }
             $user->save();
+            AuditLog::record('user.edit', $user, ['fields' => array_keys($data)]);
             return redirect('/admin/users')->with('success', 'Utilisateur mis à jour.');
         }
         return view('admin.users.form', ['title' => "Modifier {$user->username}", 'user' => $user]);
@@ -92,6 +106,7 @@ class AdminController extends Controller
         Subscription::where('user_id', $id)->where('status', 'active')->update(['status' => 'suspended']);
         if ($user->navidrome_id) { try { $nd->suspendUser($user->navidrome_id); } catch (\Exception $e) { Log::error($e->getMessage()); } }
         try { $mail->sendSuspended($user); } catch (\Exception $e) {}
+        AuditLog::record('user.suspend', $user);
         return back()->with('success', "Utilisateur {$user->username} suspendu.");
     }
 
@@ -106,6 +121,7 @@ class AdminController extends Controller
                 try { $nd->reactivateUser($user->navidrome_id, $originalPassword); } catch (\Exception $e) { Log::error($e->getMessage()); }
             }
         }
+        AuditLog::record('user.reactivate', $user);
         return back()->with('success', "Utilisateur {$user->username} réactivé avec son mot de passe original.");
     }
 
@@ -126,6 +142,7 @@ class AdminController extends Controller
         }
         $user->status = 'deleted';
         $user->save();
+        AuditLog::record('user.delete', $user);
         return redirect('/admin/users')->with('success', "Utilisateur supprimé.");
     }
 
@@ -148,6 +165,7 @@ class AdminController extends Controller
         // on libère aussi le username pour la même raison
         $user->username = 'released_' . now()->timestamp . '_' . $user->username;
         $user->save();
+        AuditLog::record('user.release_email', $user, ['original_email' => $originalEmail]);
         return back()->with('success', "Email {$originalEmail} libéré — il peut maintenant être réutilisé.");
     }
 
@@ -160,20 +178,30 @@ class AdminController extends Controller
             $wallet->increment('balance', $request->amount);
             WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'adjustment', 'amount' => $request->amount, 'description' => $request->input('description', 'Ajustement admin')]);
         });
+        $user = User::find($userId);
+        AuditLog::record('wallet.adjust', $user, ['amount' => $request->amount]);
         return back()->with('success', "Portefeuille ajusté de {$request->amount}€.");
     }
 
     // ─── Plans ───
     public function plans() { return view('admin.plans.list', ['plans' => Plan::orderBy('sort_order')->get()]); }
-    public function planCreate(Request $request)
+    public function planCreate(PlanRequest $request)
     {
-        if ($request->isMethod('post')) { Plan::create($request->validate(['name' => 'required', 'description' => 'nullable', 'price' => 'required|numeric', 'billing_cycle' => 'required', 'stripe_price_id' => 'nullable|starts_with:price_', 'max_devices' => 'required|integer', 'sort_order' => 'nullable|integer'], ['stripe_price_id.starts_with' => 'Le Stripe Price ID doit commencer par "price_" (pas "prod_"). Dans Stripe, ouvrez le Produit → section Tarification → copiez l\'ID qui commence par price_.'])); return redirect('/admin/plans')->with('success', 'Formule créée.'); }
+        if ($request->isMethod('post')) {
+            $plan = Plan::create($request->validated());
+            AuditLog::record('plan.create', $plan);
+            return redirect('/admin/plans')->with('success', 'Formule créée.');
+        }
         return view('admin.plans.form', ['title' => 'Nouvelle formule', 'plan' => null]);
     }
-    public function planEdit(string $id, Request $request)
+    public function planEdit(string $id, PlanRequest $request)
     {
         $plan = Plan::findOrFail($id);
-        if ($request->isMethod('post')) { $plan->update($request->validate(['name' => 'required', 'description' => 'nullable', 'price' => 'required|numeric', 'billing_cycle' => 'required', 'stripe_price_id' => 'nullable|starts_with:price_', 'max_devices' => 'required|integer', 'is_active' => 'nullable', 'sort_order' => 'nullable|integer'], ['stripe_price_id.starts_with' => 'Le Stripe Price ID doit commencer par "price_" (pas "prod_"). Dans Stripe, ouvrez le Produit → section Tarification → copiez l\'ID qui commence par price_.'])); return redirect('/admin/plans')->with('success', 'Formule mise à jour.'); }
+        if ($request->isMethod('post')) {
+            $plan->update($request->validated());
+            AuditLog::record('plan.edit', $plan);
+            return redirect('/admin/plans')->with('success', 'Formule mise à jour.');
+        }
         return view('admin.plans.form', ['title' => "Modifier {$plan->name}", 'plan' => $plan]);
     }
 
@@ -181,13 +209,21 @@ class AdminController extends Controller
     public function promos() { return view('admin.promos.list', ['promos' => PromoCode::latest('created_at')->get()]); }
     public function promoCreate(Request $request)
     {
-        if ($request->isMethod('post')) { PromoCode::create($request->validate(['code' => 'required|unique:promo_codes', 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date'])); return redirect('/admin/promos')->with('success', 'Code promo créé.'); }
+        if ($request->isMethod('post')) {
+            $promo = PromoCode::create($request->validate(['code' => 'required|unique:promo_codes', 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date']));
+            AuditLog::record('promo.create', $promo);
+            return redirect('/admin/promos')->with('success', 'Code promo créé.');
+        }
         return view('admin.promos.form', ['title' => 'Nouveau code promo', 'promo' => null]);
     }
     public function promoEdit(string $id, Request $request)
     {
         $promo = PromoCode::findOrFail($id);
-        if ($request->isMethod('post')) { $promo->update($request->validate(['code' => "required|unique:promo_codes,code,{$id}", 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date', 'is_active' => 'nullable'])); return redirect('/admin/promos')->with('success', 'Code mis à jour.'); }
+        if ($request->isMethod('post')) {
+            $promo->update($request->validate(['code' => "required|unique:promo_codes,code,{$id}", 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date', 'is_active' => 'nullable']));
+            AuditLog::record('promo.edit', $promo);
+            return redirect('/admin/promos')->with('success', 'Code mis à jour.');
+        }
         return view('admin.promos.form', ['title' => "Modifier {$promo->code}", 'promo' => $promo]);
     }
 
@@ -215,6 +251,7 @@ class AdminController extends Controller
                 }
                 $payment->update(['status' => $amount >= $payment->amount ? 'refunded' : 'partially_refunded']);
                 try { $mail->sendRefund($payment->user); } catch (\Exception $e) {}
+                AuditLog::record('refund.create', $payment, ['amount' => $amount]);
                 return redirect('/admin/payments')->with('success', "Remboursement de {$amount}€ effectué.");
             } catch (\Exception $e) { $refund->update(['status' => 'failed']); return back()->with('error', "Erreur: {$e->getMessage()}"); }
         }
@@ -272,5 +309,13 @@ class AdminController extends Controller
             return redirect('/admin/settings/email-templates')->with('success', 'Template sauvegardé.');
         }
         return view('admin.settings.email-template-form', ['template' => $tpl]);
+    }
+
+    // ─── Audit Logs ───
+    public function auditLogs(Request $request)
+    {
+        $q = AuditLog::with('admin')->latest();
+        if ($action = $request->input('action')) $q->where('action', 'like', "{$action}%");
+        return view('admin.audit-logs', ['logs' => $q->paginate(50)]);
     }
 }

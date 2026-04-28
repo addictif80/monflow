@@ -6,32 +6,73 @@
 <h1 class="text-2xl font-bold mb-6">Tableau de bord</h1>
 
 {{-- Stats Grid --}}
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
         <p class="text-gray-400 text-sm">Utilisateurs totaux</p>
         <p class="text-3xl font-bold mt-1">{{ $totalUsers }}</p>
+        <p class="text-xs text-gray-500 mt-1">+{{ $newUsersMonth }} ce mois</p>
     </div>
     <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
         <p class="text-gray-400 text-sm">Utilisateurs actifs</p>
         <p class="text-3xl font-bold mt-1 text-green-400">{{ $activeUsers }}</p>
-    </div>
-    <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
-        <p class="text-gray-400 text-sm">Utilisateurs suspendus</p>
-        <p class="text-3xl font-bold mt-1 text-red-400">{{ $suspendedUsers }}</p>
+        <p class="text-xs text-gray-500 mt-1">{{ $suspendedUsers }} suspendus / {{ $deletedUsers }} supprimés</p>
     </div>
     <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
         <p class="text-gray-400 text-sm">Abonnements actifs</p>
         <p class="text-3xl font-bold mt-1 text-indigo-400">{{ $activeSubs }}</p>
+        <p class="text-xs mt-1 {{ $expiringSoon > 0 ? 'text-yellow-400' : 'text-gray-500' }}">{{ $expiringSoon }} expirent dans 7j</p>
     </div>
     <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
         <p class="text-gray-400 text-sm">Revenus du mois</p>
         <p class="text-3xl font-bold mt-1 text-green-400">{{ number_format($revenueMonth, 2, ',', ' ') }} &euro;</p>
+        @php $delta = $revenueMonth - $revenueLastMonth; @endphp
+        <p class="text-xs mt-1 {{ $delta >= 0 ? 'text-green-500' : 'text-red-400' }}">
+            {{ $delta >= 0 ? '+' : '' }}{{ number_format($delta, 2, ',', ' ') }} &euro; vs mois dernier
+        </p>
+    </div>
+    <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
+        <p class="text-gray-400 text-sm">Churn du mois</p>
+        <p class="text-3xl font-bold mt-1 text-red-400">{{ $churnMonth }}</p>
+        <p class="text-xs text-gray-500 mt-1">abonnements résiliés</p>
     </div>
     <div class="bg-gray-800 border border-gray-700 rounded-lg p-5">
         <p class="text-gray-400 text-sm">Tickets ouverts</p>
         <p class="text-3xl font-bold mt-1 text-yellow-400">{{ $openTickets }}</p>
     </div>
 </div>
+
+{{-- Revenue Chart --}}
+@if($monthlyRevenue->isNotEmpty())
+<div class="bg-gray-800 border border-gray-700 rounded-lg p-5 mb-8">
+    <h2 class="text-lg font-semibold mb-4">Revenus des 6 derniers mois</h2>
+    <canvas id="revenueChart" height="80"></canvas>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('revenueChart'), {
+    type: 'bar',
+    data: {
+        labels: @json($monthlyRevenue->keys()),
+        datasets: [{
+            label: 'Revenus (€)',
+            data: @json($monthlyRevenue->values()),
+            backgroundColor: 'rgba(99,102,241,0.5)',
+            borderColor: 'rgb(99,102,241)',
+            borderWidth: 1,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: { beginAtZero: true, ticks: { color: '#9ca3af', callback: v => v + ' €' }, grid: { color: '#374151' } },
+            x: { ticks: { color: '#9ca3af' }, grid: { display: false } }
+        },
+        plugins: { legend: { display: false } }
+    }
+});
+</script>
+@endif
 
 {{-- Recent Payments --}}
 <div class="bg-gray-800 border border-gray-700 rounded-lg p-5 mb-8">
@@ -49,7 +90,7 @@
             <tbody>
                 @forelse($recentPayments as $payment)
                     <tr class="border-b border-gray-700/50 hover:bg-gray-700">
-                        <td class="py-2 pr-4">{{ $payment->user->username }}</td>
+                        <td class="py-2 pr-4">{{ $payment->user->username ?? '—' }}</td>
                         <td class="py-2 pr-4">{{ number_format($payment->amount, 2, ',', ' ') }} &euro;</td>
                         <td class="py-2 pr-4">
                             @if($payment->status === 'succeeded')
@@ -87,7 +128,7 @@
             <tbody>
                 @forelse($recentTickets as $ticket)
                     <tr class="border-b border-gray-700/50 hover:bg-gray-700">
-                        <td class="py-2 pr-4">{{ $ticket->user->username }}</td>
+                        <td class="py-2 pr-4">{{ $ticket->user->username ?? '—' }}</td>
                         <td class="py-2 pr-4">
                             <a href="/admin/tickets/{{ $ticket->id }}" class="text-indigo-400 hover:text-indigo-300">{{ $ticket->subject }}</a>
                         </td>

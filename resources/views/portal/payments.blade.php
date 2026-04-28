@@ -11,6 +11,7 @@
                 <th class="px-4 py-3">Montant</th>
                 <th class="px-4 py-3">Méthode</th>
                 <th class="px-4 py-3">Statut</th>
+                <th class="px-4 py-3">Facture</th>
             </tr></thead>
             <tbody>
             @forelse($payments as $p)
@@ -23,9 +24,14 @@
                         @php $colors = ['succeeded' => 'green', 'pending' => 'yellow', 'failed' => 'red', 'refunded' => 'gray', 'partially_refunded' => 'gray']; $c = $colors[$p->status] ?? 'gray'; @endphp
                         <span class="px-2 py-0.5 text-xs rounded-full bg-{{ $c }}-900/50 text-{{ $c }}-400 border border-{{ $c }}-700">{{ $p->status }}</span>
                     </td>
+                    <td class="px-4 py-3">
+                        @if($p->status === 'succeeded')
+                            <a href="/portal/payments/{{ $p->id }}/invoice" target="_blank" class="text-indigo-400 hover:text-indigo-300 text-xs">Facture</a>
+                        @endif
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">Aucun paiement.</td></tr>
+                <tr><td colspan="6" class="px-4 py-6 text-center text-gray-500">Aucun paiement.</td></tr>
             @endforelse
             </tbody>
         </table>

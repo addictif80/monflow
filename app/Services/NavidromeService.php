@@ -28,10 +28,14 @@ class NavidromeService
 
     private function authenticate(): string
     {
-        $response = Http::timeout(10)->post("{$this->baseUrl}/auth/login", [
+        $response = retry(3, fn () => Http::timeout(10)->post("{$this->baseUrl}/auth/login", [
             'username' => $this->adminUser,
             'password' => $this->adminPassword,
-        ]);
+        ]), function (int $attempt) {
+            return $attempt * 1000;
+        }, function ($e) {
+            return $e instanceof \Illuminate\Http\Client\ConnectionException;
+        });
         $response->throw();
         $this->token = $response->json('token');
         return $this->token;
@@ -43,16 +47,26 @@ class NavidromeService
             $this->authenticate();
         }
 
-        $response = Http::timeout(10)
-            ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
-            ->$method("{$this->baseUrl}/api{$endpoint}", $data);
+        $doRequest = function () use ($method, $endpoint, $data) {
+            return Http::timeout(10)
+                ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
+                ->$method("{$this->baseUrl}/api{$endpoint}", $data);
+        };
+
+        $retryWhen = function ($e) {
+            return $e instanceof \Illuminate\Http\Client\ConnectionException;
+        };
+
+        $retryDelay = function (int $attempt) {
+            return $attempt * 1000;
+        };
+
+        $response = retry(3, $doRequest, $retryDelay, $retryWhen);
 
         // Re-auth on 401
         if ($response->status() === 401) {
             $this->authenticate();
-            $response = Http::timeout(10)
-                ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
-                ->$method("{$this->baseUrl}/api{$endpoint}", $data);
+            $response = retry(3, $doRequest, $retryDelay, $retryWhen);
         }
 
         $response->throw();
@@ -121,15 +135,28 @@ class NavidromeService
         if (!$this->token) {
             $this->authenticate();
         }
-        $response = Http::timeout(10)
-            ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
-            ->delete("{$this->baseUrl}/api/user/{$navidromeId}");
-        if ($response->status() === 401) {
-            $this->authenticate();
-            $response = Http::timeout(10)
+
+        $doRequest = function () use ($navidromeId) {
+            return Http::timeout(10)
                 ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
                 ->delete("{$this->baseUrl}/api/user/{$navidromeId}");
+        };
+
+        $retryWhen = function ($e) {
+            return $e instanceof \Illuminate\Http\Client\ConnectionException;
+        };
+
+        $retryDelay = function (int $attempt) {
+            return $attempt * 1000;
+        };
+
+        $response = retry(3, $doRequest, $retryDelay, $retryWhen);
+
+        if ($response->status() === 401) {
+            $this->authenticate();
+            $response = retry(3, $doRequest, $retryDelay, $retryWhen);
         }
+
         $response->throw();
         Log::info("Navidrome: deleted user {$navidromeId}");
     }

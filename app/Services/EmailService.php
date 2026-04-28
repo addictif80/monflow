@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\{SmtpConfiguration, EmailTemplate, User};
+use App\Jobs\SendEmailJob;
 use Illuminate\Support\Facades\Log;
 
 class EmailService
@@ -41,6 +42,11 @@ class EmailService
     }
 
     public function sendTemplate(string $type, string $toEmail, array $ctx = []): void
+    {
+        SendEmailJob::dispatch($type, $toEmail, $ctx);
+    }
+
+    public function sendTemplateNow(string $type, string $toEmail, array $ctx = []): void
     {
         try {
             $smtp = $this->getSmtp();

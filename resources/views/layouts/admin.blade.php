@@ -19,6 +19,7 @@
         <a href="/admin/refunds" class="px-3 py-2 rounded hover:bg-gray-700">Remboursements</a>
         <a href="/admin/tickets" class="px-3 py-2 rounded hover:bg-gray-700">Tickets</a>
         <div class="border-t border-gray-700 mt-2 pt-2">
+            <a href="/admin/audit-logs" class="px-3 py-2 rounded hover:bg-gray-700 block">Journal d'audit</a>
             <a href="/admin/settings/smtp" class="px-3 py-2 rounded hover:bg-gray-700 block">Config SMTP</a>
             <a href="/admin/settings/email-templates" class="px-3 py-2 rounded hover:bg-gray-700 block">Templates email</a>
         </div>

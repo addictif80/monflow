@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Auth, Http, Log};
+use Illuminate\Support\Facades\{Http, Log};
 
 /**
  * Reverse proxy transparent vers l'instance Deemix.
@@ -28,11 +28,6 @@ class DeemixProxyController extends Controller
 
     public function handle(Request $request, string $any = '')
     {
-        $user = Auth::user();
-        if (!$user->is_admin && !$user->activeSubscription) {
-            return redirect('/portal/plans')->with('error', 'Deemix est réservé aux abonnés actifs.');
-        }
-
         $base = rtrim(config('services.deemix.url'), '/');
         $target = $base . '/' . ltrim($any, '/');
         if ($qs = $request->getQueryString()) $target .= '?' . $qs;
