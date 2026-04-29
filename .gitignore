@@ -42,3 +42,10 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Laravel
+/vendor/
+/node_modules/
+/bootstrap/cache/
+/storage/*.key
+composer.lock
