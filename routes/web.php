@@ -166,7 +166,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Duplicate management
     Route::get('/duplicates', [AdminController::class, 'duplicates']);
-    Route::post('/duplicates/{id}/delete', [AdminController::class, 'duplicateDelete']);
+    Route::post('/duplicates/batch-delete', [AdminController::class, 'duplicateBatchDelete']);
 
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
