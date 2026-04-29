@@ -18,6 +18,7 @@
                 <a href="/portal/payments" class="hover:text-indigo-400">Paiements</a>
                 <a href="/portal/devices" class="hover:text-indigo-400">Appareils</a>
                 <a href="/support/tickets" class="hover:text-indigo-400">Support</a>
+                <a href="/portal/feedback" class="hover:text-indigo-400">Feedback</a>
                 <a href="/player" class="hover:text-indigo-400 text-indigo-300 font-medium">Lecteur</a>
                 <a href="/portal/deemix" class="hover:text-indigo-400 text-indigo-300 font-medium">Deemix</a>
                 @php $unreadCount = \App\Models\Notification::where('user_id', Auth::id())->whereNull('read_at')->count(); @endphp

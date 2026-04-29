@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Portal\DashboardController;
+use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\TicketController;
 use App\Http\Controllers\Portal\DeemixProxyController;
 use App\Http\Controllers\PaymentController;
@@ -67,6 +68,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/support/tickets', [TicketController::class, 'index']);
     Route::match(['get', 'post'], '/support/tickets/create', [TicketController::class, 'create']);
     Route::match(['get', 'post'], '/support/tickets/{ticket}', [TicketController::class, 'show']);
+
+    // Feedback
+    Route::get('/portal/feedback', [FeedbackController::class, 'index']);
+    Route::match(['get', 'post'], '/portal/feedback/create', [FeedbackController::class, 'create']);
+    Route::get('/portal/feedback/{id}', [FeedbackController::class, 'show']);
 
     // Wallet payment for subscription
     Route::post('/portal/wallet-pay', [DashboardController::class, 'walletPay']);
@@ -140,6 +146,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     // Tickets
     Route::get('/tickets', [AdminController::class, 'tickets']);
     Route::match(['get', 'post'], '/tickets/{id}', [AdminController::class, 'ticketDetail']);
+
+    // Feedbacks
+    Route::get('/feedbacks', [AdminController::class, 'feedbacks']);
+    Route::match(['get', 'post'], '/feedbacks/{id}', [AdminController::class, 'feedbackDetail']);
+    Route::post('/feedbacks/{id}/to-ticket', [AdminController::class, 'feedbackToTicket']);
 
     // Audit logs
     Route::get('/audit-logs', [AdminController::class, 'auditLogs']);

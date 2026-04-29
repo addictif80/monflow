@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification};
+use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback};
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
@@ -413,5 +413,53 @@ class AdminController extends Controller
         $q = AuditLog::with('admin')->latest();
         if ($action = $request->input('action')) $q->where('action', 'like', "{$action}%");
         return view('admin.audit-logs', ['logs' => $q->paginate(50)]);
+    }
+
+    // ─── Feedbacks ───
+    public function feedbacks(Request $request)
+    {
+        $q = Feedback::with('user', 'ticket')->latest();
+        if ($status = $request->input('status')) $q->where('status', $status);
+        if ($type = $request->input('type')) $q->where('type', $type);
+        return view('admin.feedbacks.list', ['feedbacks' => $q->paginate(25), 'statusFilter' => $status ?? '', 'typeFilter' => $type ?? '']);
+    }
+
+    public function feedbackDetail(string $id, Request $request)
+    {
+        $feedback = Feedback::with('user', 'ticket')->findOrFail($id);
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'status' => 'required|in:new,reviewed,in_progress,resolved,dismissed',
+                'admin_note' => 'nullable|max:2000',
+            ]);
+            $feedback->update($data);
+            AuditLog::record('feedback.update', $feedback, ['status' => $data['status']]);
+            return back()->with('success', 'Feedback mis à jour.');
+        }
+        return view('admin.feedbacks.detail', ['feedback' => $feedback]);
+    }
+
+    public function feedbackToTicket(string $id)
+    {
+        $feedback = Feedback::with('user')->findOrFail($id);
+        if ($feedback->ticket_id) return back()->with('error', 'Un ticket est déjà lié à ce feedback.');
+
+        $ticket = Ticket::create([
+            'user_id' => $feedback->user_id,
+            'subject' => "[Feedback] {$feedback->subject}",
+            'category' => $feedback->type === 'bug' ? 'technical' : 'other',
+            'priority' => 'medium',
+        ]);
+        TicketMessage::create([
+            'ticket_id' => $ticket->id,
+            'author_id' => $feedback->user_id,
+            'body' => $feedback->body,
+        ]);
+        $feedback->update(['ticket_id' => $ticket->id, 'status' => 'in_progress']);
+
+        AuditLog::record('feedback.to_ticket', $feedback, ['ticket_id' => $ticket->id]);
+        Notification::push($feedback->user_id, 'support', 'Feedback pris en charge', "Votre feedback \"{$feedback->subject}\" a été transmis au support.", "/support/tickets/{$ticket->id}");
+
+        return redirect("/admin/tickets/{$ticket->id}")->with('success', 'Ticket créé à partir du feedback.');
     }
 }
