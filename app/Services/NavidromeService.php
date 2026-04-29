@@ -249,17 +249,44 @@ class NavidromeService
         ]);
     }
 
-    public function sshCommand(string $cmd): array
+    private function sshPrefix(): string
     {
         $sshHost = config('navidrome.ssh_host');
         if (!$sshHost) {
             throw new \RuntimeException('NAVIDROME_SSH_HOST non configure. Necessaire pour les operations sur fichiers distants.');
         }
         $sshUser = config('navidrome.ssh_user', 'root');
+        $sshPassword = config('navidrome.ssh_password');
         $sshKey = config('navidrome.ssh_key');
         $sshOpts = '-o StrictHostKeyChecking=no -o ConnectTimeout=10';
         if ($sshKey) $sshOpts .= ' -i ' . escapeshellarg($sshKey);
-        $fullCmd = "ssh {$sshOpts} " . escapeshellarg("{$sshUser}@{$sshHost}") . ' ' . escapeshellarg($cmd);
+
+        $prefix = '';
+        if ($sshPassword && !$sshKey) {
+            $prefix = 'sshpass -p ' . escapeshellarg($sshPassword) . ' ';
+        }
+
+        return $prefix . "ssh {$sshOpts} " . escapeshellarg("{$sshUser}@{$sshHost}");
+    }
+
+    private function scpPrefix(): string
+    {
+        $sshPassword = config('navidrome.ssh_password');
+        $sshKey = config('navidrome.ssh_key');
+        $sshOpts = '-o StrictHostKeyChecking=no -o ConnectTimeout=10';
+        if ($sshKey) $sshOpts .= ' -i ' . escapeshellarg($sshKey);
+
+        $prefix = '';
+        if ($sshPassword && !$sshKey) {
+            $prefix = 'sshpass -p ' . escapeshellarg($sshPassword) . ' ';
+        }
+
+        return $prefix . "scp {$sshOpts}";
+    }
+
+    public function sshCommand(string $cmd): array
+    {
+        $fullCmd = $this->sshPrefix() . ' ' . escapeshellarg($cmd);
         exec($fullCmd . ' 2>&1', $output, $exitCode);
         return ['output' => implode("\n", $output), 'exitCode' => $exitCode];
     }
@@ -271,20 +298,15 @@ class NavidromeService
             throw new \RuntimeException('NAVIDROME_SSH_HOST non configure.');
         }
         $sshUser = config('navidrome.ssh_user', 'root');
-        $sshKey = config('navidrome.ssh_key');
-        $sshOpts = '-o StrictHostKeyChecking=no -o ConnectTimeout=10';
-        if ($sshKey) $sshOpts .= ' -i ' . escapeshellarg($sshKey);
+
+        $escapedDir = escapeshellarg(dirname($remotePath));
+        $mkdirCmd = $this->sshPrefix() . " mkdir -p {$escapedDir}";
+        exec($mkdirCmd . ' 2>&1');
 
         $tmpFile = tempnam(sys_get_temp_dir(), 'monflow_');
         file_put_contents($tmpFile, $content);
-        $escapedDir = escapeshellarg(dirname($remotePath));
-        $escapedPath = escapeshellarg($remotePath);
 
-        $mkdirCmd = "ssh {$sshOpts} " . escapeshellarg("{$sshUser}@{$sshHost}") . " mkdir -p {$escapedDir}";
-        exec($mkdirCmd . ' 2>&1');
-
-        $scpOpts = str_replace('ssh', '', $sshOpts);
-        $scpCmd = "scp {$sshOpts} " . escapeshellarg($tmpFile) . " " . escapeshellarg("{$sshUser}@{$sshHost}:{$remotePath}");
+        $scpCmd = $this->scpPrefix() . ' ' . escapeshellarg($tmpFile) . ' ' . escapeshellarg("{$sshUser}@{$sshHost}:{$remotePath}");
         exec($scpCmd . ' 2>&1', $output, $exitCode);
         @unlink($tmpFile);
 

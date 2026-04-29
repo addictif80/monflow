@@ -8,5 +8,6 @@ return [
     'music_path' => env('NAVIDROME_MUSIC_PATH', '/music'),
     'ssh_host' => env('NAVIDROME_SSH_HOST'),
     'ssh_user' => env('NAVIDROME_SSH_USER', 'root'),
+    'ssh_password' => env('NAVIDROME_SSH_PASSWORD'),
     'ssh_key' => env('NAVIDROME_SSH_KEY'),
 ];
