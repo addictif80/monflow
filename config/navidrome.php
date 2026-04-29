@@ -10,4 +10,5 @@ return [
     'ssh_user' => env('NAVIDROME_SSH_USER', 'root'),
     'ssh_password' => env('NAVIDROME_SSH_PASSWORD'),
     'ssh_key' => env('NAVIDROME_SSH_KEY'),
+    'ssh_sudo' => env('NAVIDROME_SSH_SUDO', false),
 ];

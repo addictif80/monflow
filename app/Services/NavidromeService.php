@@ -286,7 +286,10 @@ class NavidromeService
 
     public function sshCommand(string $cmd): array
     {
-        $fullCmd = $this->sshPrefix() . ' ' . escapeshellarg($cmd);
+        $remoteCmd = config('navidrome.ssh_sudo')
+            ? 'sudo -i bash -c ' . escapeshellarg($cmd)
+            : $cmd;
+        $fullCmd = $this->sshPrefix() . ' ' . escapeshellarg($remoteCmd);
         exec($fullCmd . ' 2>&1', $output, $exitCode);
         return ['output' => implode("\n", $output), 'exitCode' => $exitCode];
     }
@@ -298,17 +301,31 @@ class NavidromeService
             throw new \RuntimeException('NAVIDROME_SSH_HOST non configure.');
         }
         $sshUser = config('navidrome.ssh_user', 'root');
-
-        $escapedDir = escapeshellarg(dirname($remotePath));
-        $mkdirCmd = $this->sshPrefix() . " mkdir -p {$escapedDir}";
-        exec($mkdirCmd . ' 2>&1');
+        $useSudo = config('navidrome.ssh_sudo');
 
         $tmpFile = tempnam(sys_get_temp_dir(), 'monflow_');
         file_put_contents($tmpFile, $content);
 
-        $scpCmd = $this->scpPrefix() . ' ' . escapeshellarg($tmpFile) . ' ' . escapeshellarg("{$sshUser}@{$sshHost}:{$remotePath}");
-        exec($scpCmd . ' 2>&1', $output, $exitCode);
+        $remoteTmp = '/tmp/monflow_upload_' . basename($tmpFile);
+        $scpCmd = $this->scpPrefix() . ' ' . escapeshellarg($tmpFile) . ' ' . escapeshellarg("{$sshUser}@{$sshHost}:{$remoteTmp}");
+        exec($scpCmd . ' 2>&1', $scpOutput, $scpExit);
         @unlink($tmpFile);
+
+        if ($scpExit !== 0) {
+            return ['output' => implode("\n", $scpOutput), 'exitCode' => $scpExit];
+        }
+
+        $escapedDir = escapeshellarg(dirname($remotePath));
+        $escapedPath = escapeshellarg($remotePath);
+        $escapedTmp = escapeshellarg($remoteTmp);
+        $moveCmd = "mkdir -p {$escapedDir} && mv -f {$escapedTmp} {$escapedPath}";
+
+        if ($useSudo) {
+            $moveCmd = 'sudo -i bash -c ' . escapeshellarg($moveCmd);
+        }
+
+        $sshMoveCmd = $this->sshPrefix() . ' ' . escapeshellarg($moveCmd);
+        exec($sshMoveCmd . ' 2>&1', $output, $exitCode);
 
         return ['output' => implode("\n", $output), 'exitCode' => $exitCode];
     }
