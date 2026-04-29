@@ -10,23 +10,24 @@ use Illuminate\Support\Facades\Log;
 class SendWeeklyNewMusic extends Command
 {
     protected $signature = 'newsletter:weekly-new-music';
-    protected $description = 'Send weekly email with new tracks added to the server';
+    protected $description = 'Send weekly email with new albums and top artists';
 
     public function handle(NavidromeService $nd, EmailService $mail): void
     {
         try {
-            $albums = $nd->getRecentAlbums(20, 7);
+            $albums = $nd->getRecentAlbums(10);
+            $topArtists = $nd->getTopPlayedArtists(5);
         } catch (\Exception $e) {
             $this->error("Failed to fetch from Navidrome: {$e->getMessage()}");
             return;
         }
 
-        if (empty($albums)) {
-            $this->info('No new music this week, skipping.');
+        if (empty($albums) && empty($topArtists)) {
+            $this->info('No new music and no play data, skipping.');
             return;
         }
 
-        $html = $this->buildEmail($albums);
+        $html = $this->buildEmail($albums, $topArtists);
         $subject = 'Les nouveautés de la semaine sur {{ site_name }}';
 
         $nl = Newsletter::create(['subject' => $subject, 'html_body' => $html, 'status' => 'sending']);
@@ -48,13 +49,13 @@ class SendWeeklyNewMusic extends Command
         }
 
         $nl->update(['status' => 'sent', 'recipients_count' => $sent, 'sent_at' => now()]);
-        $this->info("Weekly newsletter sent to {$sent} subscriber(s) with " . count($albums) . " new album(s).");
+        $this->info("Weekly newsletter sent to {$sent} subscriber(s) with " . count($albums) . " album(s) and " . count($topArtists) . " top artist(s).");
     }
 
-    private function buildEmail(array $albums): string
+    private function buildEmail(array $albums, array $topArtists): string
     {
         $albumCards = '';
-        foreach (array_slice($albums, 0, 12) as $album) {
+        foreach (array_slice($albums, 0, 10) as $album) {
             $title = htmlspecialchars($album['name'] ?? 'Sans titre');
             $artist = htmlspecialchars($album['albumArtist'] ?? $album['artist'] ?? 'Artiste inconnu');
             $songCount = $album['songCount'] ?? 0;
@@ -76,8 +77,42 @@ class SendWeeklyNewMusic extends Command
             HTML;
         }
 
-        $count = count($albums);
-        $moreText = $count > 12 ? "<p style=\"text-align:center;font-size:13px;color:#71717a;margin:16px 0 0\">Et " . ($count - 12) . " autre(s) album(s)...</p>" : '';
+        $artistCards = '';
+        foreach ($topArtists as $i => $artist) {
+            $name = htmlspecialchars($artist['name'] ?? 'Inconnu');
+            $playCount = $artist['playCount'] ?? 0;
+            $albumCount = $artist['albumCount'] ?? 0;
+            $rank = $i + 1;
+            $medal = match($rank) { 1 => '&#129351;', 2 => '&#129352;', 3 => '&#129353;', default => "<span style=\"display:inline-block;width:24px;text-align:center;font-weight:700;color:#71717a\">{$rank}</span>" };
+
+            $artistCards .= <<<HTML
+            <tr><td style="padding:8px 0;border-bottom:1px solid #f4f4f5">
+              <table cellpadding="0" cellspacing="0" width="100%"><tr>
+                <td width="32" style="vertical-align:middle;text-align:center;font-size:18px">{$medal}</td>
+                <td style="vertical-align:top;padding-left:8px">
+                  <div style="font-weight:600;font-size:14px;color:#18181b">{$name}</div>
+                  <div style="font-size:13px;color:#71717a;margin-top:2px">{$playCount} écoute(s) &middot; {$albumCount} album(s)</div>
+                </td>
+              </tr></table>
+            </td></tr>
+            HTML;
+        }
+
+        $albumsSection = '';
+        if (!empty($albums)) {
+            $albumsSection = <<<HTML
+            <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#18181b">Ajouts récents</h2>
+            <table width="100%" cellpadding="0" cellspacing="0">{$albumCards}</table>
+            HTML;
+        }
+
+        $artistsSection = '';
+        if (!empty($topArtists)) {
+            $artistsSection = <<<HTML
+            <h2 style="margin:28px 0 16px;font-size:18px;font-weight:600;color:#18181b">Top 5 artistes les plus écoutés</h2>
+            <table width="100%" cellpadding="0" cellspacing="0">{$artistCards}</table>
+            HTML;
+        }
 
         return <<<HTML
 <!DOCTYPE html>
@@ -92,12 +127,10 @@ class SendWeeklyNewMusic extends Command
   </td></tr>
   <tr><td style="background:#ffffff;padding:40px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7">
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b">Les nouveautés de la semaine</h1>
-    <p style="margin:0 0 24px;font-size:15px;color:#71717a">Voici les derniers albums ajoutés sur votre serveur MonFlow.</p>
-    <table width="100%" cellpadding="0" cellspacing="0">
-      {$albumCards}
-    </table>
-    {$moreText}
-    <table cellpadding="0" cellspacing="0" style="margin:28px auto 0"><tr><td style="background:#6366f1;border-radius:8px;padding:14px 28px"><a href="{{ site_url }}/player" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:14px">Ecouter maintenant</a></td></tr></table>
+    <p style="margin:0 0 24px;font-size:15px;color:#71717a">Voici les nouveautés de la semaine sur MonFlow.</p>
+    {$albumsSection}
+    {$artistsSection}
+    <table cellpadding="0" cellspacing="0" style="margin:28px auto 0"><tr><td style="background:#6366f1;border-radius:8px;padding:14px 28px"><a href="{{ site_url }}/player" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:14px">Écouter maintenant</a></td></tr></table>
   </td></tr>
   <tr><td style="background:#fafafa;border-radius:0 0 12px 12px;padding:24px 40px;border:1px solid #e4e4e7;border-top:none;text-align:center">
     <p style="margin:0;font-size:12px;color:#a1a1aa;line-height:1.5">{{ site_name }} &mdash; Votre musique, votre espace</p>
