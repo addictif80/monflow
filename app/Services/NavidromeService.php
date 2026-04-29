@@ -171,16 +171,19 @@ class NavidromeService
         return $this->request('get', '/user?_end=10000&_order=ASC&_sort=userName&_start=0');
     }
 
-    public function getRecentSongs(int $limit = 30, int $days = 7): array
+    public function getRecentAlbums(int $limit = 10): array
     {
-        $since = now()->subDays($days)->toIso8601String();
-        return $this->request('get', "/song?_end={$limit}&_order=DESC&_sort=createdAt&_start=0&createdAt_gt={$since}");
+        return $this->request('get', "/album?_end={$limit}&_order=DESC&_sort=createdAt&_start=0");
     }
 
-    public function getRecentAlbums(int $limit = 20, int $days = 7): array
+    public function getTopPlayedArtists(int $limit = 5): array
     {
-        $since = now()->subDays($days)->toIso8601String();
-        return $this->request('get', "/album?_end={$limit}&_order=DESC&_sort=createdAt&_start=0&createdAt_gt={$since}");
+        return $this->request('get', "/artist?_end={$limit}&_order=DESC&_sort=playCount&_start=0");
+    }
+
+    public function getTopPlayedSongs(int $limit = 10): array
+    {
+        return $this->request('get', "/song?_end={$limit}&_order=DESC&_sort=playCount&_start=0");
     }
 
     public function testConnection(): array

@@ -82,6 +82,18 @@ class EmailService
         $this->send($smtp, $u->email, $renderedSubject, $renderedBody);
     }
 
+    public function sendNewsletterNow(User $user, string $subject, string $html): void
+    {
+        $smtp = $this->getSmtp();
+        $ctx = [
+            'username' => $user->username,
+            'first_name' => $user->first_name,
+            'site_name' => config('app.name'),
+            'site_url' => config('app.url'),
+        ];
+        $this->send($smtp, $user->email, $this->render($subject, $ctx), $this->render($html, $ctx));
+    }
+
     public function testSmtp(SmtpConfiguration $smtp, string $testEmail): array
     {
         try {

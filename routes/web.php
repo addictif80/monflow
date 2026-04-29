@@ -85,6 +85,20 @@ Route::middleware('auth')->group(function () {
     // Invoice PDF
     Route::get('/portal/payments/{id}/invoice', [DashboardController::class, 'invoice']);
 
+    // Player API — rankings from Navidrome admin API
+    Route::get('/player/api/top-artists', function (\App\Services\NavidromeService $nd) {
+        try { return response()->json($nd->getTopPlayedArtists(10)); }
+        catch (\Exception $e) { return response()->json([], 500); }
+    });
+    Route::get('/player/api/top-songs', function (\App\Services\NavidromeService $nd) {
+        try { return response()->json($nd->getTopPlayedSongs(10)); }
+        catch (\Exception $e) { return response()->json([], 500); }
+    });
+    Route::get('/player/api/recent-albums', function (\App\Services\NavidromeService $nd) {
+        try { return response()->json($nd->getRecentAlbums(10)); }
+        catch (\Exception $e) { return response()->json([], 500); }
+    });
+
     // Web player — réservé aux abonnés actifs (et admins)
     Route::get('/player', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
@@ -153,15 +167,15 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::match(['get', 'post'], '/feedbacks/{id}', [AdminController::class, 'feedbackDetail']);
     Route::post('/feedbacks/{id}/to-ticket', [AdminController::class, 'feedbackToTicket']);
 
-    // Audit logs
-    Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
-
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
     Route::match(['get', 'post'], '/newsletters/create', [AdminController::class, 'newsletterCreate']);
     Route::match(['get', 'post'], '/newsletters/{id}/edit', [AdminController::class, 'newsletterEdit']);
     Route::post('/newsletters/{id}/send', [AdminController::class, 'newsletterSend']);
     Route::get('/newsletters/{id}/preview', [AdminController::class, 'newsletterPreview']);
+
+    // Audit logs
+    Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
 
     // Settings
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);
