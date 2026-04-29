@@ -76,11 +76,20 @@
             <span id="totTime" class="text-xs text-slate-400 w-10">0:00</span>
         </div>
     </div>
-    <div class="flex items-center gap-2 w-40 justify-end">
+    <div class="flex items-center gap-2 w-48 justify-end">
+        <button id="lyricsBtn" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-slate-700" title="Paroles">Aa</button>
         <span class="text-slate-400">🔊</span>
         <input id="volume" type="range" min="0" max="100" value="80" class="w-24 accent-indigo-500">
     </div>
 </footer>
+
+<div id="lyricsPanel" class="fixed right-0 top-14 bottom-20 w-80 card border-l transform translate-x-full transition-transform duration-300 z-50 flex flex-col" style="display:none">
+    <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between shrink-0">
+        <span class="text-sm font-semibold">Paroles</span>
+        <button id="lyricsClose" class="text-slate-400 hover:text-white text-lg">&times;</button>
+    </div>
+    <div id="lyricsContent" class="flex-1 overflow-y-auto scroll p-4 text-sm text-slate-300 leading-relaxed"></div>
+</div>
 
 <audio id="audio"></audio>
 
@@ -345,6 +354,7 @@ function playIndex(i) {
         cover.innerHTML = `<img src="${coverUrl(s.coverArt || s.id, 100)}" class="w-full h-full object-cover rounded" onerror="this.parentElement.innerHTML='🎵'">`;
     }
     renderQueue();
+    if (lyricsVisible) loadLyrics();
 }
 
 function renderQueue() {
@@ -380,6 +390,105 @@ document.getElementById('progress').oninput = (e) => {
 };
 document.getElementById('volume').oninput = (e) => { audio.volume = e.target.value / 100; };
 audio.volume = 0.8;
+
+// ─── Lyrics ───
+const lyricsPanel = document.getElementById('lyricsPanel');
+const lyricsContent = document.getElementById('lyricsContent');
+let lyricsVisible = false;
+let lyricsLines = [];
+let lyricsSynced = false;
+
+document.getElementById('lyricsBtn').onclick = () => {
+    lyricsVisible = !lyricsVisible;
+    if (lyricsVisible) {
+        lyricsPanel.style.display = 'flex';
+        requestAnimationFrame(() => lyricsPanel.classList.remove('translate-x-full'));
+        document.getElementById('lyricsBtn').classList.add('text-indigo-400');
+        loadLyrics();
+    } else {
+        closeLyrics();
+    }
+};
+document.getElementById('lyricsClose').onclick = () => closeLyrics();
+
+function closeLyrics() {
+    lyricsVisible = false;
+    lyricsPanel.classList.add('translate-x-full');
+    document.getElementById('lyricsBtn').classList.remove('text-indigo-400');
+    setTimeout(() => { if (!lyricsVisible) lyricsPanel.style.display = 'none'; }, 300);
+}
+
+async function loadLyrics() {
+    const s = state.queue[state.currentIndex];
+    if (!s) { lyricsContent.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune piste en cours</div>'; return; }
+    lyricsContent.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement...</div>';
+    lyricsLines = [];
+    lyricsSynced = false;
+    try {
+        const resp = await ndCall('getLyricsBySongId.view', { id: s.id });
+        const lyricsList = resp.lyricsList?.structuredLyrics || [];
+        if (lyricsList.length) {
+            const synced = lyricsList.find(l => l.synced) || lyricsList[0];
+            if (synced.synced && synced.line) {
+                lyricsSynced = true;
+                lyricsLines = synced.line.map(l => ({ time: (l.start || 0) / 1000, text: l.value || '' }));
+                renderSyncedLyrics();
+                return;
+            }
+            if (synced.line) {
+                lyricsContent.innerHTML = synced.line.map(l => `<p class="py-1">${escapeHtml(l.value || '')}</p>`).join('');
+                return;
+            }
+        }
+        const resp2 = await ndCall('getLyrics.view', { artist: s.artist || '', title: s.title || '' });
+        const text = resp2.lyrics?.value;
+        if (text) {
+            lyricsContent.innerHTML = text.split('\n').map(l => `<p class="py-1">${escapeHtml(l)}</p>`).join('');
+        } else {
+            lyricsContent.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune parole disponible</div>';
+        }
+    } catch (e) {
+        try {
+            const resp2 = await ndCall('getLyrics.view', { artist: s.artist || '', title: s.title || '' });
+            const text = resp2.lyrics?.value;
+            if (text) {
+                lyricsContent.innerHTML = text.split('\n').map(l => `<p class="py-1">${escapeHtml(l)}</p>`).join('');
+            } else {
+                lyricsContent.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune parole disponible</div>';
+            }
+        } catch (e2) {
+            lyricsContent.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune parole disponible</div>';
+        }
+    }
+}
+
+function renderSyncedLyrics() {
+    lyricsContent.innerHTML = lyricsLines.map((l, i) =>
+        `<p class="lyrics-line py-2 px-2 rounded transition-all duration-300 cursor-pointer" data-idx="${i}">${escapeHtml(l.text) || '♪'}</p>`
+    ).join('');
+    lyricsContent.querySelectorAll('.lyrics-line').forEach(el => {
+        el.onclick = () => { audio.currentTime = lyricsLines[el.dataset.idx].time; };
+    });
+}
+
+audio.addEventListener('timeupdate', () => {
+    if (!lyricsSynced || !lyricsVisible || !lyricsLines.length) return;
+    const t = audio.currentTime;
+    let active = -1;
+    for (let i = lyricsLines.length - 1; i >= 0; i--) {
+        if (t >= lyricsLines[i].time) { active = i; break; }
+    }
+    lyricsContent.querySelectorAll('.lyrics-line').forEach((el, i) => {
+        if (i === active) {
+            el.classList.add('text-white', 'font-semibold', 'text-base');
+            el.classList.remove('text-slate-500', 'text-sm');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            el.classList.remove('text-white', 'font-semibold', 'text-base');
+            el.classList.add('text-slate-500', 'text-sm');
+        }
+    });
+});
 
 // ─── Rankings (Subsonic API — user's own play stats from all Navidrome clients) ───
 async function loadWeekArtists() {
