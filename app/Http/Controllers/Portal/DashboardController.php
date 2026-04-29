@@ -77,8 +77,17 @@ class DashboardController extends Controller
             if ($promo && !$promo->is_valid) $promo = null;
         }
 
-        if ($months === 1) {
-            // Abonnement récurrent classique via Stripe Subscription
+        $baseAmount = $plan->price * $months;
+        $discount = 0;
+        if ($promo) {
+            $discount = $promo->discount_type === 'percentage'
+                ? round($baseAmount * $promo->discount_value / 100, 2)
+                : min($promo->discount_value, $baseAmount);
+        }
+        $finalAmount = max(0, $baseAmount - $discount);
+
+        if ($months === 1 && !$promo) {
+            // Abonnement récurrent classique via Stripe Subscription (sans promo)
             if (!$plan->stripe_price_id || !str_starts_with($plan->stripe_price_id, 'price_')) {
                 Log::error("Plan {$plan->id} ({$plan->name}) has an invalid stripe_price_id: " . ($plan->stripe_price_id ?? 'null'));
                 return redirect('/portal/plans')->with('error', 'Cette formule est mal configurée (Stripe Price ID manquant ou invalide). Merci de contacter le support.');
@@ -93,21 +102,26 @@ class DashboardController extends Controller
                 return redirect('/portal/plans')->with('error', 'Impossible de démarrer le paiement. Merci de réessayer ou de contacter le support.');
             }
 
-            // Supprimer les pending orphelins puis créer le nouveau pending
             Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
             Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
             return redirect($session->url);
         }
 
-        // Paiement unique pour N mois d'avance (pas de Stripe Subscription, juste un one-shot)
+        // Paiement unique (prépayé ou 1 mois avec promo) — montant calculé avec réduction
+        $description = "{$plan->name} — {$months} mois";
+        if ($promo) $description .= " (code {$promo->code} : -{$discount}€)";
+
         try {
             $session = $stripe->createPrepaySession($user, $plan, $months,
                 url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
-                url('/portal/plans'));
+                url('/portal/plans'),
+                $finalAmount);
         } catch (\Exception $e) {
             Log::error("Stripe prepay checkout failed for user {$user->id} plan {$plan->id}: {$e->getMessage()}");
             return redirect('/portal/plans')->with('error', 'Impossible de démarrer le paiement. Merci de réessayer ou de contacter le support.');
         }
+
+        if ($promo) $promo->increment('current_uses');
 
         Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
         Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
@@ -212,17 +226,35 @@ class DashboardController extends Controller
         $months = (int) $request->input('months', 1);
         if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
 
-        $total = $plan->price * $months;
+        $baseTotal = $plan->price * $months;
+        $promo = null;
+        $discount = 0;
+        if ($code = $request->input('promo')) {
+            $promo = PromoCode::where('code', $code)->first();
+            if ($promo && $promo->is_valid) {
+                $discount = $promo->discount_type === 'percentage'
+                    ? round($baseTotal * $promo->discount_value / 100, 2)
+                    : min($promo->discount_value, $baseTotal);
+            } else {
+                $promo = null;
+            }
+        }
+        $total = max(0, $baseTotal - $discount);
         $wallet = $user->wallet ?? Wallet::create(['user_id' => $user->id]);
 
         if ($wallet->balance < $total) {
             return back()->with('error', "Solde insuffisant ({$wallet->balance}€). Rechargez votre portefeuille.");
         }
 
-        DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd) {
+        if ($promo) $promo->increment('current_uses');
+
+        $description = "{$plan->name} — {$months} mois";
+        if ($promo) $description .= " (code {$promo->code} : -{$discount}€)";
+
+        DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
             $wallet = Wallet::lockForUpdate()->find($wallet->id);
             $wallet->decrement('balance', $total);
-            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'subscription', 'amount' => -$total, 'description' => "{$plan->name} — {$months} mois"]);
+            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'subscription', 'amount' => -$total, 'description' => $description]);
 
             $days = $plan->period_days * $months;
             $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();

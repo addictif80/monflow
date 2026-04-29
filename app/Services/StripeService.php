@@ -40,10 +40,10 @@ class StripeService
         ]);
     }
 
-    public function createPrepaySession(User $user, \App\Models\Plan $plan, int $months, string $successUrl, string $cancelUrl): Session
+    public function createPrepaySession(User $user, \App\Models\Plan $plan, int $months, string $successUrl, string $cancelUrl, ?float $customAmount = null): Session
     {
         $customer = $this->getOrCreateCustomer($user);
-        $amountCents = (int) round($plan->price * 100 * $months);
+        $amountCents = (int) round(($customAmount ?? $plan->price * $months) * 100);
         return Session::create([
             'customer' => $customer->id,
             'payment_method_types' => ['card'],
