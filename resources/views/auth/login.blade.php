@@ -1,13 +1,13 @@
 @extends('layouts.auth')
 @section('title', 'Connexion — MonFlow')
 @section('content')
-@if(session('unverified_email'))
+@if(request('unverified'))
     <div class="bg-gray-800 rounded-lg p-6 mb-4">
         <div class="p-3 bg-yellow-900/50 border border-yellow-700 rounded text-yellow-300 text-sm">
             <p class="mb-2">Votre email n'est pas encore confirmé. Vérifiez votre boîte de réception ou renvoyez le mail.</p>
             <form action="/verify-email/resend-public" method="POST">
                 @csrf
-                <input type="hidden" name="email" value="{{ session('unverified_email') }}">
+                <input type="hidden" name="email" value="{{ request('unverified') }}">
                 <button type="submit" class="px-4 py-1.5 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-sm font-medium transition">Renvoyer le mail de confirmation</button>
             </form>
         </div>

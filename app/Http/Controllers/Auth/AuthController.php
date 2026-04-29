@@ -29,7 +29,9 @@ class AuthController extends Controller
         if ($user->status === 'suspended') return back()->withErrors(['username' => 'Compte suspendu. Régularisez votre paiement.']);
         if ($user->status === 'deleted') return back()->withErrors(['username' => 'Ce compte a été supprimé.']);
         if (!$user->is_admin && !$user->email_verified_at) {
-            return back()->withErrors(['username' => 'Confirmez votre email avant de vous connecter. Vérifiez votre boîte de réception.'])->withInput()->with('unverified_email', $user->email);
+            return redirect('/login?unverified=' . urlencode($user->email))
+                ->withErrors(['username' => 'Confirmez votre email avant de vous connecter.'])
+                ->withInput();
         }
 
         Auth::login($user, $request->boolean('remember'));
