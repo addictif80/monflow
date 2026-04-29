@@ -33,6 +33,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->n
 // ─── Email verification (public, token-based) ───
 Route::get('/verify-email/{token}', [AuthController::class, 'verifyEmail'])->name('verify.email');
 Route::post('/verify-email/resend', [AuthController::class, 'resendVerification'])->middleware('auth')->name('verify.resend');
+Route::post('/verify-email/resend-public', [AuthController::class, 'resendVerificationPublic'])->middleware('throttle:auth')->name('verify.resend.public');
 
 // ─── Stripe Webhook (no auth, no CSRF) ───
 Route::post('/stripe/webhook', [PaymentController::class, 'stripeWebhook'])->name('stripe.webhook');

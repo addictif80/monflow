@@ -29,7 +29,7 @@ class AuthController extends Controller
         if ($user->status === 'suspended') return back()->withErrors(['username' => 'Compte suspendu. Régularisez votre paiement.']);
         if ($user->status === 'deleted') return back()->withErrors(['username' => 'Ce compte a été supprimé.']);
         if (!$user->is_admin && !$user->email_verified_at) {
-            return back()->withErrors(['username' => 'Confirmez votre email avant de vous connecter. Vérifiez votre boîte de réception.'])->withInput();
+            return back()->withErrors(['username' => 'Confirmez votre email avant de vous connecter. Vérifiez votre boîte de réception.'])->withInput()->with('unverified_email', $user->email);
         }
 
         Auth::login($user, $request->boolean('remember'));
@@ -107,6 +107,16 @@ class AuthController extends Controller
         if ($user->email_verified_at) return back()->with('success', 'Votre email est déjà confirmé.');
         $this->sendVerificationLink($user, $mail);
         return back()->with('success', 'Email de confirmation renvoyé.');
+    }
+
+    public function resendVerificationPublic(Request $request, EmailService $mail)
+    {
+        $request->validate(['email' => 'required|email']);
+        $user = User::where('email', $request->email)->first();
+        if ($user && !$user->email_verified_at) {
+            $this->sendVerificationLink($user, $mail);
+        }
+        return redirect('/login')->with('success', 'Si un compte non confirmé existe, un nouveau mail de confirmation a été envoyé.');
     }
 
     public function logout(Request $request)
