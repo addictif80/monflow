@@ -203,6 +203,136 @@ class NavidromeService
         return $this->request('get', "/song?_end={$limit}&_order=DESC&_sort=playCount&_start=0");
     }
 
+    public function streamSong(string $id): \Illuminate\Http\Client\Response
+    {
+        $salt = bin2hex(random_bytes(6));
+        $token = md5($this->adminPassword . $salt);
+        $publicUrl = rtrim(config('navidrome.public_url'), '/');
+        $url = "{$publicUrl}/rest/stream.view?" . http_build_query([
+            'u' => $this->adminUser, 't' => $token, 's' => $salt,
+            'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json', 'id' => $id,
+        ]);
+
+        return retry(3, fn () => Http::timeout(30)->withOptions(['stream' => true])->get($url),
+            fn (int $attempt) => $attempt * 1000,
+            fn ($e) => $e instanceof \Illuminate\Http\Client\ConnectionException
+        );
+    }
+
+    public function getAlbum(string $id): array
+    {
+        return $this->request('get', "/album/{$id}");
+    }
+
+    public function getAlbumSongs(string $albumId, int $limit = 500): array
+    {
+        return $this->request('get', "/song?_end={$limit}&_order=ASC&_sort=trackNumber&_start=0&album_id={$albumId}");
+    }
+
+    public function getAllSongs(int $start = 0, int $end = 100, string $sort = 'title', string $order = 'ASC', array $filters = []): array
+    {
+        $query = "_end={$end}&_order={$order}&_sort={$sort}&_start={$start}";
+        foreach ($filters as $k => $v) {
+            $query .= '&' . urlencode($k) . '=' . urlencode($v);
+        }
+        return $this->request('get', "/song?{$query}");
+    }
+
+    public function triggerScan(): void
+    {
+        $salt = bin2hex(random_bytes(6));
+        $token = md5($this->adminPassword . $salt);
+        $publicUrl = rtrim(config('navidrome.public_url'), '/');
+        Http::timeout(10)->get("{$publicUrl}/rest/startScan.view", [
+            'u' => $this->adminUser, 't' => $token, 's' => $salt,
+            'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json',
+        ]);
+    }
+
+    public function sshCommand(string $cmd): array
+    {
+        $sshHost = config('navidrome.ssh_host');
+        if (!$sshHost) {
+            throw new \RuntimeException('NAVIDROME_SSH_HOST non configure. Necessaire pour les operations sur fichiers distants.');
+        }
+        $sshUser = config('navidrome.ssh_user', 'root');
+        $sshKey = config('navidrome.ssh_key');
+        $sshOpts = '-o StrictHostKeyChecking=no -o ConnectTimeout=10';
+        if ($sshKey) $sshOpts .= ' -i ' . escapeshellarg($sshKey);
+        $fullCmd = "ssh {$sshOpts} " . escapeshellarg("{$sshUser}@{$sshHost}") . ' ' . escapeshellarg($cmd);
+        exec($fullCmd . ' 2>&1', $output, $exitCode);
+        return ['output' => implode("\n", $output), 'exitCode' => $exitCode];
+    }
+
+    public function sshWriteFile(string $remotePath, string $content): array
+    {
+        $sshHost = config('navidrome.ssh_host');
+        if (!$sshHost) {
+            throw new \RuntimeException('NAVIDROME_SSH_HOST non configure.');
+        }
+        $sshUser = config('navidrome.ssh_user', 'root');
+        $sshKey = config('navidrome.ssh_key');
+        $sshOpts = '-o StrictHostKeyChecking=no -o ConnectTimeout=10';
+        if ($sshKey) $sshOpts .= ' -i ' . escapeshellarg($sshKey);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'monflow_');
+        file_put_contents($tmpFile, $content);
+        $escapedDir = escapeshellarg(dirname($remotePath));
+        $escapedPath = escapeshellarg($remotePath);
+
+        $mkdirCmd = "ssh {$sshOpts} " . escapeshellarg("{$sshUser}@{$sshHost}") . " mkdir -p {$escapedDir}";
+        exec($mkdirCmd . ' 2>&1');
+
+        $scpOpts = str_replace('ssh', '', $sshOpts);
+        $scpCmd = "scp {$sshOpts} " . escapeshellarg($tmpFile) . " " . escapeshellarg("{$sshUser}@{$sshHost}:{$remotePath}");
+        exec($scpCmd . ' 2>&1', $output, $exitCode);
+        @unlink($tmpFile);
+
+        return ['output' => implode("\n", $output), 'exitCode' => $exitCode];
+    }
+
+    public function deleteRemoteFile(string $remotePath): array
+    {
+        return $this->sshCommand("rm -f " . escapeshellarg($remotePath));
+    }
+
+    public function getLyricsBySongId(string $id): ?string
+    {
+        $salt = bin2hex(random_bytes(6));
+        $token = md5($this->adminPassword . $salt);
+        $publicUrl = rtrim(config('navidrome.public_url'), '/');
+
+        try {
+            $response = Http::timeout(10)->get("{$publicUrl}/rest/getLyricsBySongId.view", [
+                'u' => $this->adminUser, 't' => $token, 's' => $salt,
+                'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json', 'id' => $id,
+            ]);
+            $data = $response->json('subsonic-response');
+            if (($data['status'] ?? '') !== 'ok') return null;
+            $lyrics = $data['lyricsList']['structuredLyrics'] ?? [];
+            if (empty($lyrics)) return null;
+            $synced = collect($lyrics)->firstWhere('synced', true) ?? $lyrics[0];
+            $lines = $synced['line'] ?? [];
+            if (empty($lines)) return null;
+            $lrc = '';
+            foreach ($lines as $line) {
+                if (isset($line['start'])) {
+                    $ms = (int) $line['start'];
+                    $min = str_pad(intdiv($ms, 60000), 2, '0', STR_PAD_LEFT);
+                    $sec = str_pad(intdiv($ms % 60000, 1000), 2, '0', STR_PAD_LEFT);
+                    $cs = str_pad(intdiv($ms % 1000, 10), 2, '0', STR_PAD_LEFT);
+                    $lrc .= "[{$min}:{$sec}.{$cs}]" . ($line['value'] ?? '') . "\n";
+                } else {
+                    $lrc .= ($line['value'] ?? '') . "\n";
+                }
+            }
+            return $lrc;
+        } catch (\Exception $e) {
+            Log::warning("Failed to get lyrics for song {$id}: {$e->getMessage()}");
+            return null;
+        }
+    }
+
     public function testConnection(): array
     {
         try {

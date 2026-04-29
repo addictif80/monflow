@@ -427,47 +427,180 @@ class AdminController extends Controller
     public function lyricsEdit(string $id, NavidromeService $nd)
     {
         $song = $nd->getSong($id);
-        $lrcContent = '';
-        $lrcPath = $this->getLrcPath($song);
-        if ($lrcPath && file_exists($lrcPath)) {
-            $lrcContent = file_get_contents($lrcPath);
-        }
+        $lrcContent = $nd->getLyricsBySongId($id) ?? '';
         return view('admin.lyrics.edit', compact('song', 'lrcContent'));
     }
 
     public function lyricsSave(string $id, Request $request, NavidromeService $nd)
     {
         $song = $nd->getSong($id);
-        $lrcPath = $this->getLrcPath($song);
-        if (!$lrcPath) {
-            return back()->with('error', 'Impossible de déterminer le chemin du fichier audio.');
+        $lrcContent = $request->input('lrc_content', '');
+
+        $musicPath = config('navidrome.music_path');
+        $songPath = $song['path'] ?? null;
+        if (!$songPath) {
+            return back()->with('error', 'Chemin du fichier audio introuvable.');
         }
-        $dir = dirname($lrcPath);
-        if (!is_dir($dir)) @mkdir($dir, 0755, true);
-        file_put_contents($lrcPath, $request->input('lrc_content', ''));
+        $lrcPath = preg_replace('/\.[^.]+$/', '.lrc', $musicPath . '/' . ltrim($songPath, '/'));
+
+        try {
+            $result = $nd->sshWriteFile($lrcPath, $lrcContent);
+            if ($result['exitCode'] !== 0) {
+                return back()->with('error', 'Erreur ecriture LRC : ' . $result['output']);
+            }
+            $nd->triggerScan();
+        } catch (\RuntimeException $e) {
+            $dir = dirname($lrcPath);
+            if (!is_dir($dir)) @mkdir($dir, 0755, true);
+            file_put_contents($lrcPath, $lrcContent);
+        }
+
         AuditLog::record('lyrics.save', null, ['song_id' => $id, 'title' => $song['title'] ?? '']);
-        return back()->with('success', 'Paroles enregistrées. Relancez un scan Navidrome pour les prendre en compte.');
+        return back()->with('success', 'Paroles enregistrees. Un scan Navidrome a ete lance.');
     }
 
     public function lyricsStream(string $id, NavidromeService $nd)
     {
-        $song = $nd->getSong($id);
-        $path = $song['path'] ?? null;
-        $musicPath = config('navidrome.music_path');
-        $fullPath = $musicPath . '/' . ltrim($path, '/');
-        if (!$path || !file_exists($fullPath)) {
+        try {
+            $response = $nd->streamSong($id);
+            return response($response->body(), $response->status())
+                ->header('Content-Type', $response->header('Content-Type') ?? 'audio/mpeg')
+                ->header('Accept-Ranges', 'bytes');
+        } catch (\Exception $e) {
             return response('Fichier introuvable', 404);
         }
-        return response()->file($fullPath);
     }
 
-    private function getLrcPath(array $song): ?string
+    // ─── Metadata Management ───
+    public function metadata(Request $request, NavidromeService $nd)
     {
-        $path = $song['path'] ?? null;
-        if (!$path) return null;
+        $songs = [];
+        $q = $request->input('q');
+        if ($q) {
+            try { $songs = $nd->searchSongs($q, 50); } catch (\Exception $e) {}
+        }
+        return view('admin.metadata.index', compact('songs', 'q'));
+    }
+
+    public function metadataEdit(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $albumSongs = [];
+        if ($albumId = $song['albumId'] ?? null) {
+            try { $albumSongs = $nd->getAlbumSongs($albumId); } catch (\Exception $e) {}
+        }
+        return view('admin.metadata.edit', compact('song', 'albumSongs'));
+    }
+
+    public function metadataSave(string $id, Request $request, NavidromeService $nd)
+    {
+        $data = $request->validate([
+            'title' => 'required|max:255',
+            'artist' => 'nullable|max:255',
+            'albumArtist' => 'nullable|max:255',
+            'album' => 'nullable|max:255',
+            'genre' => 'nullable|max:100',
+            'trackNumber' => 'nullable|integer|min:0',
+            'discNumber' => 'nullable|integer|min:0',
+            'year' => 'nullable|integer|min:0|max:9999',
+            'comment' => 'nullable|max:1000',
+        ]);
+
+        $song = $nd->getSong($id);
+        $songPath = $song['path'] ?? null;
+        if (!$songPath) {
+            return back()->with('error', 'Chemin du fichier audio introuvable.');
+        }
+
         $musicPath = config('navidrome.music_path');
-        $fullPath = $musicPath . '/' . ltrim($path, '/');
-        return preg_replace('/\.[^.]+$/', '.lrc', $fullPath);
+        $fullPath = $musicPath . '/' . ltrim($songPath, '/');
+
+        $tagMap = [
+            'title' => 'title', 'artist' => 'artist', 'albumArtist' => 'album_artist',
+            'album' => 'album', 'genre' => 'genre', 'year' => 'date',
+            'trackNumber' => 'track', 'discNumber' => 'disc', 'comment' => 'comment',
+        ];
+
+        $metaArgs = '';
+        foreach ($tagMap as $formField => $ffmpegTag) {
+            $val = $data[$formField] ?? '';
+            if ($val !== '' && $val !== null) {
+                $metaArgs .= ' -metadata ' . escapeshellarg("{$ffmpegTag}={$val}");
+            }
+        }
+
+        if (!$metaArgs) {
+            return back()->with('error', 'Aucune modification.');
+        }
+
+        $escaped = escapeshellarg($fullPath);
+        $tmpPath = escapeshellarg($fullPath . '.tmp');
+        $cmd = "ffmpeg -i {$escaped} -c copy{$metaArgs} -y {$tmpPath} && mv -f {$tmpPath} {$escaped}";
+
+        try {
+            $result = $nd->sshCommand($cmd);
+            if ($result['exitCode'] !== 0) {
+                return back()->with('error', 'Erreur ffmpeg : ' . $result['output']);
+            }
+            $nd->triggerScan();
+            AuditLog::record('metadata.update', null, ['song_id' => $id, 'fields' => array_keys(array_filter($data, fn ($v) => $v !== null && $v !== ''))]);
+            return back()->with('success', 'Metadonnees mises a jour. Scan Navidrome lance.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Erreur : ' . $e->getMessage());
+        }
+    }
+
+    // ─── Duplicate Management ───
+    public function duplicates(Request $request, NavidromeService $nd)
+    {
+        $duplicates = [];
+        $scanned = false;
+
+        if ($request->has('scan')) {
+            $scanned = true;
+            try {
+                $allSongs = $nd->getAllSongs(0, 10000, 'title', 'ASC');
+                $grouped = [];
+                foreach ($allSongs as $song) {
+                    $key = mb_strtolower(trim($song['title'] ?? '')) . '|||' . mb_strtolower(trim($song['artist'] ?? ''));
+                    $grouped[$key][] = $song;
+                }
+                foreach ($grouped as $group) {
+                    if (count($group) > 1) {
+                        $duplicates[] = $group;
+                    }
+                }
+                usort($duplicates, fn ($a, $b) => strcasecmp($a[0]['title'] ?? '', $b[0]['title'] ?? ''));
+            } catch (\Exception $e) {
+                return back()->with('error', 'Erreur lors du scan : ' . $e->getMessage());
+            }
+        }
+
+        return view('admin.duplicates.index', compact('duplicates', 'scanned'));
+    }
+
+    public function duplicateDelete(string $id, Request $request, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $songPath = $song['path'] ?? null;
+        if (!$songPath) {
+            return back()->with('error', 'Chemin du fichier introuvable.');
+        }
+
+        $musicPath = config('navidrome.music_path');
+        $fullPath = $musicPath . '/' . ltrim($songPath, '/');
+
+        try {
+            $result = $nd->deleteRemoteFile($fullPath);
+            if ($result['exitCode'] !== 0) {
+                return back()->with('error', 'Erreur suppression : ' . $result['output']);
+            }
+            $nd->triggerScan();
+            AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $song['title'] ?? '', 'artist' => $song['artist'] ?? '']);
+            return back()->with('success', "« {$song['title']} » supprime. Scan Navidrome lance.");
+        } catch (\Exception $e) {
+            return back()->with('error', 'Erreur : ' . $e->getMessage());
+        }
     }
 
     // ─── Audit Logs ───

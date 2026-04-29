@@ -6,4 +6,7 @@ return [
     'admin_user' => env('NAVIDROME_ADMIN_USER', 'admin'),
     'admin_password' => env('NAVIDROME_ADMIN_PASSWORD', 'admin'),
     'music_path' => env('NAVIDROME_MUSIC_PATH', '/music'),
+    'ssh_host' => env('NAVIDROME_SSH_HOST'),
+    'ssh_user' => env('NAVIDROME_SSH_USER', 'root'),
+    'ssh_key' => env('NAVIDROME_SSH_KEY'),
 ];
