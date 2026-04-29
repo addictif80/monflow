@@ -284,10 +284,16 @@ class NavidromeService
         return $prefix . "scp {$sshOpts}";
     }
 
+    private function sudoWrap(string $cmd): string
+    {
+        $sudoPass = config('navidrome.sudo_password') ?: config('navidrome.ssh_password');
+        return 'echo ' . escapeshellarg($sudoPass) . ' | sudo -S -i bash -c ' . escapeshellarg($cmd);
+    }
+
     public function sshCommand(string $cmd): array
     {
         $remoteCmd = config('navidrome.ssh_sudo')
-            ? 'sudo -i bash -c ' . escapeshellarg($cmd)
+            ? $this->sudoWrap($cmd)
             : $cmd;
         $fullCmd = $this->sshPrefix() . ' ' . escapeshellarg($remoteCmd);
         exec($fullCmd . ' 2>&1', $output, $exitCode);
@@ -321,7 +327,7 @@ class NavidromeService
         $moveCmd = "mkdir -p {$escapedDir} && mv -f {$escapedTmp} {$escapedPath}";
 
         if ($useSudo) {
-            $moveCmd = 'sudo -i bash -c ' . escapeshellarg($moveCmd);
+            $moveCmd = $this->sudoWrap($moveCmd);
         }
 
         $sshMoveCmd = $this->sshPrefix() . ' ' . escapeshellarg($moveCmd);
