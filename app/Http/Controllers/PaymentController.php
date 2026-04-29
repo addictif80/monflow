@@ -9,7 +9,43 @@ use Illuminate\Support\Facades\{DB, Log, Hash};
 
 class PaymentController extends Controller
 {
-    public function success() { return view('portal.payment-success'); }
+    public function success(Request $request)
+    {
+        $user = $request->user();
+        if ($user && $sessionId = $request->query('session_id')) {
+            try {
+                $session = \Stripe\Checkout\Session::retrieve($sessionId);
+                if ($session->payment_status === 'paid') {
+                    $meta = $session->metadata?->toArray() ?? [];
+                    $type = $meta['type'] ?? 'subscription';
+
+                    $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->with('plan')->latest()->first();
+                    if ($sub) {
+                        if ($type === 'prepay') {
+                            $plan = $sub->plan;
+                            $months = (int) ($meta['months'] ?? 1);
+                            $days = $plan->period_days * max(1, $months);
+                            $end = ($sub->current_period_end && $sub->current_period_end->isFuture())
+                                ? $sub->current_period_end->copy()->addDays($days)
+                                : now()->addDays($days);
+                            $sub->update(['status' => 'active', 'current_period_start' => $sub->current_period_start ?? now(), 'current_period_end' => $end]);
+                        } else {
+                            $sub->update(['status' => 'active', 'stripe_subscription_id' => $session->subscription ?? '', 'current_period_start' => now(), 'current_period_end' => now()->addDays($sub->plan->period_days)]);
+                        }
+
+                        if ($user->status === 'suspended') $user->update(['status' => 'active']);
+                        if ($user->navidrome_id) {
+                            $pw = $user->getDecryptedPassword();
+                            if ($pw) { try { app(NavidromeService::class)->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) {} }
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("Success page session check failed: {$e->getMessage()}");
+            }
+        }
+        return view('portal.payment-success');
+    }
     public function walletSuccess() { return view('portal.wallet-success'); }
     public function giftSuccess() { return view('portal.gift-success'); }
 
