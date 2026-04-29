@@ -591,13 +591,22 @@ class AdminController extends Controller
         $fullPath = $musicPath . '/' . ltrim($songPath, '/');
 
         try {
-            $result = $nd->deleteRemoteFile($fullPath);
-            if ($result['exitCode'] !== 0) {
-                return back()->with('error', 'Erreur suppression : ' . $result['output']);
+            $check = $nd->sshCommand('test -f ' . escapeshellarg($fullPath) . ' && echo EXISTS || echo NOTFOUND');
+            if (str_contains($check['output'], 'NOTFOUND')) {
+                return back()->with('error', "Fichier introuvable sur le serveur distant : {$fullPath}");
             }
+            if ($check['exitCode'] !== 0 && !str_contains($check['output'], 'EXISTS')) {
+                return back()->with('error', "Erreur SSH : {$check['output']}");
+            }
+
+            $result = $nd->sshCommand('rm ' . escapeshellarg($fullPath));
+            if ($result['exitCode'] !== 0) {
+                return back()->with('error', "Erreur suppression ({$fullPath}) : {$result['output']}");
+            }
+
             $nd->triggerScan();
-            AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $song['title'] ?? '', 'artist' => $song['artist'] ?? '']);
-            return back()->with('success', "« {$song['title']} » supprime. Scan Navidrome lance.");
+            AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $song['title'] ?? '', 'path' => $fullPath]);
+            return back()->with('success', "« {$song['title']} » supprime ({$fullPath}). Scan Navidrome lance.");
         } catch (\Exception $e) {
             return back()->with('error', 'Erreur : ' . $e->getMessage());
         }
