@@ -381,103 +381,109 @@ document.getElementById('progress').oninput = (e) => {
 document.getElementById('volume').oninput = (e) => { audio.volume = e.target.value / 100; };
 audio.volume = 0.8;
 
-// ─── Rankings (from backend API) ───
+// ─── Rankings (Subsonic API — user's own play stats from all Navidrome clients) ───
 async function loadWeekArtists() {
     viewTitle.textContent = 'Classement des artistes';
     mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement...</div>';
-    try {
-        const r = await fetch('/player/api/top-artists');
-        const artists = await r.json();
-        viewCount.textContent = `${artists.length} artistes`;
-        const container = document.createElement('div');
-        container.className = 'space-y-1';
-        if (!artists.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune donnée d\'écoute disponible.</div>'; return; }
-        artists.forEach((a, i) => {
-            const el = document.createElement('div');
-            el.className = 'list-item flex items-center gap-3 px-3 py-3 rounded cursor-pointer text-sm';
-            const medal = i < 3 ? ['&#129351;','&#129352;','&#129353;'][i] : `<span class="text-slate-500 font-bold">${i+1}</span>`;
-            el.innerHTML = `
-                <span class="w-8 text-center text-lg">${medal}</span>
-                <div class="flex-1 min-w-0">
-                    <div class="font-medium truncate">${escapeHtml(a.name)}</div>
-                    <div class="text-xs text-slate-400">${a.playCount || 0} écoute(s) · ${a.albumCount || 0} albums</div>
-                </div>`;
-            el.onclick = () => { if (a.id) loadArtist(a.id, a.name); };
-            container.appendChild(el);
-        });
-        mainArea.innerHTML = '';
-        mainArea.appendChild(container);
-    } catch (e) { mainArea.innerHTML = '<div class="text-red-400 text-center py-8">Erreur de chargement</div>'; }
+    const resp = await ndCall('getAlbumList2.view', { type: 'frequent', size: 50 });
+    const albums = resp.albumList2?.album || [];
+    if (!albums.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune donnée d\'écoute disponible. Écoutez de la musique depuis n\'importe quel client Navidrome.</div>'; viewCount.textContent = ''; return; }
+    const artistMap = {};
+    albums.forEach(al => {
+        const name = al.artist || 'Inconnu';
+        if (!artistMap[name]) artistMap[name] = { name, id: al.artistId, playCount: 0, albumCount: 0 };
+        artistMap[name].playCount += al.playCount || 0;
+        artistMap[name].albumCount++;
+    });
+    const artists = Object.values(artistMap).sort((a, b) => b.playCount - a.playCount).slice(0, 10);
+    viewCount.textContent = `${artists.length} artistes`;
+    const container = document.createElement('div');
+    container.className = 'space-y-1';
+    artists.forEach((a, i) => {
+        const el = document.createElement('div');
+        el.className = 'list-item flex items-center gap-3 px-3 py-3 rounded cursor-pointer text-sm';
+        const medal = i < 3 ? ['&#129351;','&#129352;','&#129353;'][i] : `<span class="text-slate-500 font-bold">${i+1}</span>`;
+        el.innerHTML = `
+            <span class="w-8 text-center text-lg">${medal}</span>
+            <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">${escapeHtml(a.name)}</div>
+                <div class="text-xs text-slate-400">${a.playCount} écoute(s) · ${a.albumCount} album(s)</div>
+            </div>`;
+        el.onclick = () => { if (a.id) loadArtist(a.id, a.name); };
+        container.appendChild(el);
+    });
+    mainArea.innerHTML = '';
+    mainArea.appendChild(container);
 }
 
 async function loadWeekSongs() {
     viewTitle.textContent = 'Classement des titres';
     mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement...</div>';
-    try {
-        const r = await fetch('/player/api/top-songs');
-        const songs = await r.json();
-        viewCount.textContent = `${songs.length} titres`;
-        const container = document.createElement('div');
-        container.className = 'space-y-1';
-        if (!songs.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune donnée d\'écoute disponible.</div>'; return; }
-        const header = document.createElement('div');
-        header.className = 'mb-4';
-        header.innerHTML = '<button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium">▶ Tout lire</button>';
-        header.children[0].onclick = () => { state.queue = songs.filter(s => s.id); playIndex(0); };
-        container.appendChild(header);
-        songs.forEach((s, i) => {
-            const el = document.createElement('div');
-            el.className = 'list-item flex items-center gap-3 px-3 py-3 rounded cursor-pointer text-sm';
-            const medal = i < 3 ? ['&#129351;','&#129352;','&#129353;'][i] : `<span class="text-slate-500 font-bold">${i+1}</span>`;
-            el.innerHTML = `
-                <span class="w-8 text-center text-lg">${medal}</span>
-                <div class="flex-1 min-w-0">
-                    <div class="truncate">${escapeHtml(s.title)}</div>
-                    <div class="text-xs text-slate-400 truncate">${escapeHtml(s.artist || '')} · ${escapeHtml(s.album || '')}</div>
-                </div>
-                <span class="text-xs text-slate-500">${s.playCount || 0} écoute(s)</span>
-                <span class="text-xs text-slate-500">${formatTime(s.duration || 0)}</span>`;
-            el.onclick = () => { state.queue = songs.filter(x => x.id); playIndex(songs.filter(x => x.id).indexOf(s)); };
-            container.appendChild(el);
-        });
-        mainArea.innerHTML = '';
-        mainArea.appendChild(container);
-    } catch (e) { mainArea.innerHTML = '<div class="text-red-400 text-center py-8">Erreur de chargement</div>'; }
+    const resp = await ndCall('getAlbumList2.view', { type: 'frequent', size: 20 });
+    const albums = resp.albumList2?.album || [];
+    if (!albums.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune donnée d\'écoute disponible. Écoutez de la musique depuis n\'importe quel client Navidrome.</div>'; viewCount.textContent = ''; return; }
+    const allSongs = [];
+    for (const al of albums.slice(0, 10)) {
+        try {
+            const r = await ndCall('getAlbum.view', { id: al.id });
+            const songs = r.album?.song || [];
+            songs.forEach(s => { if (s.playCount > 0) allSongs.push(s); });
+        } catch(e) {}
+    }
+    allSongs.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+    const topSongs = allSongs.slice(0, 20);
+    viewCount.textContent = `${topSongs.length} titres`;
+    if (!topSongs.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucun titre écouté pour le moment.</div>'; return; }
+    const container = document.createElement('div');
+    container.className = 'space-y-1';
+    const header = document.createElement('div');
+    header.className = 'mb-4';
+    header.innerHTML = '<button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium">▶ Tout lire</button>';
+    header.children[0].onclick = () => { state.queue = [...topSongs]; playIndex(0); };
+    container.appendChild(header);
+    topSongs.forEach((s, i) => {
+        const el = document.createElement('div');
+        el.className = 'list-item flex items-center gap-3 px-3 py-3 rounded cursor-pointer text-sm';
+        const medal = i < 3 ? ['&#129351;','&#129352;','&#129353;'][i] : `<span class="text-slate-500 font-bold">${i+1}</span>`;
+        el.innerHTML = `
+            <span class="w-8 text-center text-lg">${medal}</span>
+            <div class="flex-1 min-w-0">
+                <div class="truncate">${escapeHtml(s.title)}</div>
+                <div class="text-xs text-slate-400 truncate">${escapeHtml(s.artist || '')} · ${escapeHtml(s.album || '')}</div>
+            </div>
+            <span class="text-xs text-slate-500">${s.playCount || 0} écoute(s)</span>
+            <span class="text-xs text-slate-500">${formatTime(s.duration || 0)}</span>`;
+        el.onclick = () => { state.queue = [...topSongs]; playIndex(i); };
+        container.appendChild(el);
+    });
+    mainArea.innerHTML = '';
+    mainArea.appendChild(container);
 }
 
 async function loadWeekAlbums() {
     viewTitle.textContent = 'Ajouts de la semaine';
     mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement...</div>';
-    try {
-        const r = await fetch('/player/api/recent-albums');
-        const albums = await r.json();
-        viewCount.textContent = `${albums.length} albums`;
-        if (!albums.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucun ajout récent.</div>'; return; }
-        mainArea.innerHTML = '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>';
-        const grid = mainArea.firstElementChild;
-        albums.forEach(al => {
-            const el = document.createElement('button');
-            el.className = 'card rounded overflow-hidden text-left hover:bg-slate-700 transition';
-            const coverId = al.coverArtId || al.id;
-            el.innerHTML = `
-                <div class="aspect-square bg-slate-900 flex items-center justify-center">
-                    ${coverId ? `<img src="${coverUrl(coverId, 300)}" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentElement.innerHTML='&#9835;'">` : '<span class="text-4xl text-slate-600">&#9835;</span>'}
-                </div>
-                <div class="p-2">
-                    <div class="font-medium truncate text-sm">${escapeHtml(al.name)}</div>
-                    <div class="text-xs text-slate-400 truncate">${escapeHtml(al.albumArtist || al.artist || '')}</div>
-                    <div class="text-xs text-slate-500">${al.songCount || 0} titre(s)</div>
-                </div>`;
-            el.onclick = async () => {
-                try {
-                    const resp = await ndCall('search3.view', { query: al.name });
-                    const found = (resp.searchResult3?.album || []).find(a => a.name === al.name);
-                    if (found) loadAlbum(found.id, found.name);
-                } catch(e) {}
-            };
-            grid.appendChild(el);
-        });
-    } catch (e) { mainArea.innerHTML = '<div class="text-red-400 text-center py-8">Erreur de chargement</div>'; }
+    const resp = await ndCall('getAlbumList2.view', { type: 'newest', size: 10 });
+    const albums = resp.albumList2?.album || [];
+    viewCount.textContent = `${albums.length} albums`;
+    if (!albums.length) { mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Aucun ajout récent.</div>'; return; }
+    mainArea.innerHTML = '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>';
+    const grid = mainArea.firstElementChild;
+    albums.forEach(al => {
+        const el = document.createElement('button');
+        el.className = 'card rounded overflow-hidden text-left hover:bg-slate-700 transition';
+        el.innerHTML = `
+            <div class="aspect-square bg-slate-900 flex items-center justify-center">
+                <img src="${coverUrl(al.coverArt || al.id, 300)}" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentElement.innerHTML='&#9835;'">
+            </div>
+            <div class="p-2">
+                <div class="font-medium truncate text-sm">${escapeHtml(al.name)}</div>
+                <div class="text-xs text-slate-400 truncate">${escapeHtml(al.artist || '')}</div>
+                <div class="text-xs text-slate-500">${al.songCount || 0} titre(s)</div>
+            </div>`;
+        el.onclick = () => loadAlbum(al.id, al.name);
+        grid.appendChild(el);
+    });
 }
 
 // ─── Navigation ───
