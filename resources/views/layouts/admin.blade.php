@@ -20,6 +20,8 @@
         <a href="/admin/tickets" class="px-3 py-2 rounded hover:bg-gray-700">Tickets</a>
         <a href="/admin/feedbacks" class="px-3 py-2 rounded hover:bg-gray-700">Feedbacks</a>
         <a href="/admin/lyrics" class="px-3 py-2 rounded hover:bg-gray-700">Paroles</a>
+        <a href="/admin/metadata" class="px-3 py-2 rounded hover:bg-gray-700">Métadonnées</a>
+        <a href="/admin/duplicates" class="px-3 py-2 rounded hover:bg-gray-700">Doublons</a>
         <a href="/admin/newsletters" class="px-3 py-2 rounded hover:bg-gray-700">Newsletters</a>
         <div class="border-t border-gray-700 mt-2 pt-2">
             <a href="/admin/audit-logs" class="px-3 py-2 rounded hover:bg-gray-700 block">Journal d'audit</a>

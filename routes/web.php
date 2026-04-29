@@ -159,6 +159,15 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/lyrics/{id}/save', [AdminController::class, 'lyricsSave']);
     Route::get('/lyrics/{id}/stream', [AdminController::class, 'lyricsStream']);
 
+    // Metadata management
+    Route::get('/metadata', [AdminController::class, 'metadata']);
+    Route::get('/metadata/{id}/edit', [AdminController::class, 'metadataEdit']);
+    Route::post('/metadata/{id}/save', [AdminController::class, 'metadataSave']);
+
+    // Duplicate management
+    Route::get('/duplicates', [AdminController::class, 'duplicates']);
+    Route::post('/duplicates/{id}/delete', [AdminController::class, 'duplicateDelete']);
+
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
     Route::match(['get', 'post'], '/newsletters/create', [AdminController::class, 'newsletterCreate']);
