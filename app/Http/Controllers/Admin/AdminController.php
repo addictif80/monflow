@@ -413,6 +413,63 @@ class AdminController extends Controller
         return view('admin.settings.email-template-form', ['template' => $tpl]);
     }
 
+    // ─── Lyrics Management ───
+    public function lyrics(Request $request, NavidromeService $nd)
+    {
+        $songs = [];
+        $q = $request->input('q');
+        if ($q) {
+            try { $songs = $nd->searchSongs($q, 50); } catch (\Exception $e) {}
+        }
+        return view('admin.lyrics.index', compact('songs', 'q'));
+    }
+
+    public function lyricsEdit(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $lrcContent = '';
+        $lrcPath = $this->getLrcPath($song);
+        if ($lrcPath && file_exists($lrcPath)) {
+            $lrcContent = file_get_contents($lrcPath);
+        }
+        return view('admin.lyrics.edit', compact('song', 'lrcContent'));
+    }
+
+    public function lyricsSave(string $id, Request $request, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $lrcPath = $this->getLrcPath($song);
+        if (!$lrcPath) {
+            return back()->with('error', 'Impossible de déterminer le chemin du fichier audio.');
+        }
+        $dir = dirname($lrcPath);
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        file_put_contents($lrcPath, $request->input('lrc_content', ''));
+        AuditLog::record('lyrics.save', null, ['song_id' => $id, 'title' => $song['title'] ?? '']);
+        return back()->with('success', 'Paroles enregistrées. Relancez un scan Navidrome pour les prendre en compte.');
+    }
+
+    public function lyricsStream(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $path = $song['path'] ?? null;
+        $musicPath = config('navidrome.music_path');
+        $fullPath = $musicPath . '/' . ltrim($path, '/');
+        if (!$path || !file_exists($fullPath)) {
+            return response('Fichier introuvable', 404);
+        }
+        return response()->file($fullPath);
+    }
+
+    private function getLrcPath(array $song): ?string
+    {
+        $path = $song['path'] ?? null;
+        if (!$path) return null;
+        $musicPath = config('navidrome.music_path');
+        $fullPath = $musicPath . '/' . ltrim($path, '/');
+        return preg_replace('/\.[^.]+$/', '.lrc', $fullPath);
+    }
+
     // ─── Audit Logs ───
     public function auditLogs(Request $request)
     {

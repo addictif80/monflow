@@ -153,6 +153,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::match(['get', 'post'], '/feedbacks/{id}', [AdminController::class, 'feedbackDetail']);
     Route::post('/feedbacks/{id}/to-ticket', [AdminController::class, 'feedbackToTicket']);
 
+    // Lyrics management
+    Route::get('/lyrics', [AdminController::class, 'lyrics']);
+    Route::get('/lyrics/{id}/edit', [AdminController::class, 'lyricsEdit']);
+    Route::post('/lyrics/{id}/save', [AdminController::class, 'lyricsSave']);
+    Route::get('/lyrics/{id}/stream', [AdminController::class, 'lyricsStream']);
+
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
     Route::match(['get', 'post'], '/newsletters/create', [AdminController::class, 'newsletterCreate']);

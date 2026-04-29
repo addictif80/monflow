@@ -177,6 +177,17 @@ class NavidromeService
         return $this->request('get', '/user?_end=10000&_order=ASC&_sort=userName&_start=0');
     }
 
+    public function searchSongs(string $query, int $limit = 50): array
+    {
+        $encoded = urlencode($query);
+        return $this->request('get', "/song?_end={$limit}&_order=ASC&_sort=title&_start=0&title={$encoded}");
+    }
+
+    public function getSong(string $id): array
+    {
+        return $this->request('get', "/song/{$id}");
+    }
+
     public function getRecentAlbums(int $limit = 10): array
     {
         return $this->request('get', "/album?_end={$limit}&_order=DESC&_sort=createdAt&_start=0");
