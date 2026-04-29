@@ -41,6 +41,17 @@
                    class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
         </div>
 
+        <div class="pt-4 border-t border-gray-700 mb-2">
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="hidden" name="newsletter_optin" value="0">
+                <input type="checkbox" name="newsletter_optin" value="1" {{ Auth::user()->newsletter_optin ? 'checked' : '' }} class="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 bg-gray-700 border-gray-600">
+                <div>
+                    <span class="text-sm text-gray-300">Recevoir la newsletter</span>
+                    <p class="text-xs text-gray-500">Nouveautés, mises à jour et recommandations musicales</p>
+                </div>
+            </label>
+        </div>
+
         <div class="flex items-center justify-between pt-4 border-t border-gray-700">
             <a href="/portal/change-password" class="text-sm text-indigo-400 hover:text-indigo-300">
                 Changer le mot de passe

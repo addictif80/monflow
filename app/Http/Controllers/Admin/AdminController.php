@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback};
+use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter};
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
@@ -467,5 +467,61 @@ class AdminController extends Controller
         Notification::send($feedback->user_id, 'support', 'Feedback pris en charge', "Votre feedback \"{$feedback->subject}\" a été transmis au support.", "/support/tickets/{$ticket->id}");
 
         return redirect("/admin/tickets/{$ticket->id}")->with('success', 'Ticket créé à partir du feedback.');
+    }
+
+    // ─── Newsletters ───
+    public function newsletters()
+    {
+        return view('admin.newsletters.list', ['newsletters' => Newsletter::latest()->paginate(25)]);
+    }
+
+    public function newsletterCreate(Request $request)
+    {
+        if ($request->isMethod('post')) {
+            $data = $request->validate(['subject' => 'required|max:255', 'html_body' => 'required']);
+            Newsletter::create($data);
+            return redirect('/admin/newsletters')->with('success', 'Campagne créée.');
+        }
+        return view('admin.newsletters.form', ['newsletter' => null]);
+    }
+
+    public function newsletterEdit(string $id, Request $request)
+    {
+        $nl = Newsletter::findOrFail($id);
+        if ($nl->status === 'sent') return redirect('/admin/newsletters')->with('error', 'Campagne déjà envoyée.');
+        if ($request->isMethod('post')) {
+            $nl->update($request->validate(['subject' => 'required|max:255', 'html_body' => 'required']));
+            return redirect('/admin/newsletters')->with('success', 'Campagne mise à jour.');
+        }
+        return view('admin.newsletters.form', ['newsletter' => $nl]);
+    }
+
+    public function newsletterSend(string $id, EmailService $mail)
+    {
+        $nl = Newsletter::findOrFail($id);
+        if ($nl->status === 'sent') return back()->with('error', 'Déjà envoyée.');
+
+        $nl->update(['status' => 'sending']);
+        $recipients = User::where('is_admin', false)->where('status', '!=', 'deleted')->where('newsletter_optin', true)->whereNotNull('email_verified_at')->get();
+
+        $sent = 0;
+        foreach ($recipients as $user) {
+            try {
+                $mail->sendNewsletterNow($user, $nl->subject, $nl->html_body);
+                $sent++;
+            } catch (\Exception $e) {
+                Log::error("Newsletter send failed for {$user->email}: {$e->getMessage()}");
+            }
+        }
+
+        $nl->update(['status' => 'sent', 'recipients_count' => $sent, 'sent_at' => now()]);
+        AuditLog::record('newsletter.send', $nl, ['recipients' => $sent]);
+        return back()->with('success', "Newsletter envoyée à {$sent} destinataire(s).");
+    }
+
+    public function newsletterPreview(string $id)
+    {
+        $nl = Newsletter::findOrFail($id);
+        return response($nl->html_body)->header('Content-Type', 'text/html');
     }
 }

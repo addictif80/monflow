@@ -71,6 +71,17 @@ class EmailService
     public function sendRefund(User $u): void { $this->sendTemplate('refund_processed', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
     public function sendRenewalReminder(User $u, \App\Models\Plan $plan, float $price, bool $promoEnding = false): void { $this->sendTemplate('renewal_reminder', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'plan_name' => $plan->name, 'price' => $price, 'promo_ending' => $promoEnding]); }
 
+    public function sendNewsletterNow(User $u, string $subject, string $htmlBody): void
+    {
+        $smtp = $this->getSmtp();
+        $ctx = ['username' => $u->username, 'first_name' => $u->first_name, 'site_name' => config('app.name'), 'site_url' => config('app.url')];
+        $renderedSubject = $this->render($subject, $ctx);
+        $renderedBody = $this->render($htmlBody, $ctx);
+        $unsubLink = config('app.url') . '/portal/profile';
+        $renderedBody = str_replace('</body>', "<div style=\"text-align:center;padding:16px;font-size:11px;color:#a1a1aa\"><a href=\"{$unsubLink}\" style=\"color:#6366f1\">Se désabonner de la newsletter</a></div></body>", $renderedBody);
+        $this->send($smtp, $u->email, $renderedSubject, $renderedBody);
+    }
+
     public function testSmtp(SmtpConfiguration $smtp, string $testEmail): array
     {
         try {
