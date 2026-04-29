@@ -131,15 +131,25 @@ class DashboardController extends Controller
     public function resumePayment(Request $request, StripeService $stripe)
     {
         $user = Auth::user();
-        $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->with('plan')->latest()->first();
+        $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->with('plan', 'promoCode')->latest()->first();
         if (!$sub) return redirect('/portal')->with('error', 'Aucun paiement en attente.');
         if ($user->activeSubscription) return redirect('/portal')->with('error', 'Vous avez déjà un abonnement actif.');
 
         $months = (int) $request->input('months', 1);
         if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
 
+        $promo = $sub->promoCode;
+        $baseAmount = $sub->plan->price * $months;
+        $discount = 0;
+        if ($promo && $promo->is_valid) {
+            $discount = $promo->discount_type === 'percentage'
+                ? round($baseAmount * $promo->discount_value / 100, 2)
+                : min($promo->discount_value, $baseAmount);
+        }
+        $finalAmount = max(0, $baseAmount - $discount);
+
         try {
-            if ($months === 1) {
+            if ($months === 1 && !$promo) {
                 if (!$sub->plan->stripe_price_id || !str_starts_with($sub->plan->stripe_price_id, 'price_')) {
                     return redirect('/portal/plans')->with('error', 'Formule mal configurée. Contactez le support.');
                 }
@@ -149,7 +159,8 @@ class DashboardController extends Controller
             } else {
                 $session = $stripe->createPrepaySession($user, $sub->plan, $months,
                     url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
-                    url('/portal'));
+                    url('/portal'),
+                    $finalAmount);
             }
         } catch (\Exception $e) {
             Log::error("Stripe resume failed for user {$user->id}: {$e->getMessage()}");
