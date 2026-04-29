@@ -19,47 +19,85 @@
 </div>
 @endif
 
-@foreach($duplicates as $i => $group)
-<div class="bg-gray-800 border border-gray-700 rounded-lg mb-4 overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-3">
-        <span class="text-sm font-semibold">{{ $group[0]['title'] ?? '—' }}</span>
-        <span class="text-xs text-gray-400">{{ $group[0]['artist'] ?? '' }}</span>
-        <span class="text-xs px-2 py-0.5 bg-amber-900/50 text-amber-300 rounded">{{ count($group) }} copies</span>
+@if($scanned && count($duplicates) > 0)
+<form method="POST" action="/admin/duplicates/batch-delete" id="batchForm">
+    @csrf
+    <div class="mb-4 flex items-center gap-3">
+        <button type="submit" id="deleteBtn" class="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled onclick="return confirm('Supprimer definitivement les fichiers coches ?')">
+            Supprimer la selection (<span id="selectedCount">0</span>)
+        </button>
+        <button type="button" id="selectLowerBtn" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs">Selectionner les moins bons (bitrate inferieur)</button>
     </div>
-    <table class="w-full text-sm">
-        <thead><tr class="text-left text-gray-500 text-xs">
-            <th class="px-4 py-2">Album</th>
-            <th class="px-4 py-2">Duree</th>
-            <th class="px-4 py-2">Format</th>
-            <th class="px-4 py-2">Bitrate</th>
-            <th class="px-4 py-2">Taille</th>
-            <th class="px-4 py-2">Chemin</th>
-            <th class="px-4 py-2">Actions</th>
-        </tr></thead>
-        <tbody>
-        @foreach($group as $j => $s)
-            <tr class="border-t border-gray-700/50 hover:bg-gray-700/30">
-                <td class="px-4 py-2 text-gray-300">{{ $s['album'] ?? '—' }}</td>
-                <td class="px-4 py-2 text-gray-400">{{ gmdate('i:s', $s['duration'] ?? 0) }}</td>
-                <td class="px-4 py-2 text-gray-400">{{ strtoupper($s['suffix'] ?? '—') }}</td>
-                <td class="px-4 py-2 text-gray-400">{{ $s['bitRate'] ?? '—' }} kbps</td>
-                <td class="px-4 py-2 text-gray-400">{{ number_format(($s['size'] ?? 0) / 1048576, 1) }} Mo</td>
-                <td class="px-4 py-2 text-gray-500 text-xs max-w-xs truncate" title="{{ $s['path'] ?? '' }}">{{ $s['path'] ?? '—' }}</td>
-                <td class="px-4 py-2">
-                    <div class="flex gap-2">
-                        <a href="/admin/metadata/{{ $s['id'] }}/edit" class="text-indigo-400 hover:text-indigo-300 text-xs">Modifier</a>
-                        <form method="POST" action="/admin/duplicates/{{ $s['id'] }}/delete" onsubmit="return confirm('Supprimer definitivement cette copie ?')">
-                            @csrf
-                            <button class="text-red-400 hover:text-red-300 text-xs">Supprimer</button>
-                        </form>
-                    </div>
-                </td>
-            </tr>
-        @endforeach
-        </tbody>
-    </table>
-</div>
-@endforeach
+
+    @foreach($duplicates as $i => $group)
+    <div class="bg-gray-800 border border-gray-700 rounded-lg mb-4 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-3">
+            <span class="text-sm font-semibold">{{ $group[0]['title'] ?? '—' }}</span>
+            <span class="text-xs text-gray-400">{{ $group[0]['artist'] ?? '' }}</span>
+            <span class="text-xs px-2 py-0.5 bg-amber-900/50 text-amber-300 rounded">{{ count($group) }} copies</span>
+        </div>
+        <table class="w-full text-sm">
+            <thead><tr class="text-left text-gray-500 text-xs">
+                <th class="px-4 py-2 w-8"></th>
+                <th class="px-4 py-2">Album</th>
+                <th class="px-4 py-2">Duree</th>
+                <th class="px-4 py-2">Format</th>
+                <th class="px-4 py-2">Bitrate</th>
+                <th class="px-4 py-2">Taille</th>
+                <th class="px-4 py-2">Chemin</th>
+            </tr></thead>
+            <tbody>
+            @foreach($group as $j => $s)
+                <tr class="border-t border-gray-700/50 hover:bg-gray-700/30" data-group="{{ $i }}" data-bitrate="{{ $s['bitRate'] ?? 0 }}">
+                    <td class="px-4 py-2">
+                        <input type="checkbox" name="ids[]" value="{{ $s['id'] }}" class="dup-check accent-red-500 rounded">
+                    </td>
+                    <td class="px-4 py-2 text-gray-300">{{ $s['album'] ?? '—' }}</td>
+                    <td class="px-4 py-2 text-gray-400">{{ gmdate('i:s', $s['duration'] ?? 0) }}</td>
+                    <td class="px-4 py-2 text-gray-400">{{ strtoupper($s['suffix'] ?? '—') }}</td>
+                    <td class="px-4 py-2 text-gray-400">{{ $s['bitRate'] ?? '—' }} kbps</td>
+                    <td class="px-4 py-2 text-gray-400">{{ number_format(($s['size'] ?? 0) / 1048576, 1) }} Mo</td>
+                    <td class="px-4 py-2 text-gray-500 text-xs max-w-xs truncate" title="{{ $s['path'] ?? '' }}">{{ $s['path'] ?? '—' }}</td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+    @endforeach
+</form>
+
+<script>
+const checks = document.querySelectorAll('.dup-check');
+const countEl = document.getElementById('selectedCount');
+const deleteBtn = document.getElementById('deleteBtn');
+
+function updateCount() {
+    const n = document.querySelectorAll('.dup-check:checked').length;
+    countEl.textContent = n;
+    deleteBtn.disabled = n === 0;
+}
+checks.forEach(c => c.addEventListener('change', updateCount));
+
+document.getElementById('selectLowerBtn').addEventListener('click', () => {
+    const groups = {};
+    document.querySelectorAll('tr[data-group]').forEach(tr => {
+        const g = tr.dataset.group;
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(tr);
+    });
+    Object.values(groups).forEach(rows => {
+        let maxBr = 0;
+        rows.forEach(r => { maxBr = Math.max(maxBr, parseInt(r.dataset.bitrate) || 0); });
+        const best = rows.filter(r => parseInt(r.dataset.bitrate) === maxBr);
+        rows.forEach(r => {
+            const cb = r.querySelector('.dup-check');
+            cb.checked = !best.includes(r) || (best.length === rows.length && rows.indexOf(r) > 0);
+        });
+    });
+    updateCount();
+});
+</script>
+@endif
 
 @if(!$scanned)
 <div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
@@ -67,8 +105,8 @@
     <div class="text-sm text-gray-300 space-y-3">
         <p><strong>1. Scanner</strong> — Cliquez sur "Scanner la bibliotheque" pour analyser toutes les chansons.</p>
         <p><strong>2. Identifier</strong> — Les doublons sont detectes par correspondance exacte du titre et de l'artiste.</p>
-        <p><strong>3. Comparer</strong> — Pour chaque groupe, comparez le format, le bitrate et la taille pour choisir la meilleure version.</p>
-        <p><strong>4. Nettoyer</strong> — Supprimez les copies inferieures. La suppression retire le fichier de Navidrome.</p>
+        <p><strong>3. Selectionner</strong> — Cochez les copies a supprimer, ou utilisez "Selectionner les moins bons" pour cocher automatiquement les fichiers de bitrate inferieur.</p>
+        <p><strong>4. Supprimer</strong> — Cliquez sur "Supprimer la selection" pour tout supprimer en une fois.</p>
     </div>
 </div>
 @endif

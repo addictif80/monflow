@@ -579,37 +579,61 @@ class AdminController extends Controller
         return view('admin.duplicates.index', compact('duplicates', 'scanned'));
     }
 
-    public function duplicateDelete(string $id, Request $request, NavidromeService $nd)
+    public function duplicateBatchDelete(Request $request, NavidromeService $nd)
     {
-        $song = $nd->getSong($id);
-        $songPath = $song['path'] ?? null;
-        if (!$songPath) {
-            return back()->with('error', 'Chemin du fichier introuvable.');
+        $ids = $request->input('ids', []);
+        if (empty($ids)) {
+            return back()->with('error', 'Aucun fichier selectionne.');
         }
 
         $musicPath = config('navidrome.music_path');
-        $fullPath = $musicPath . '/' . ltrim($songPath, '/');
+        $deleted = 0;
+        $errors = [];
+        $rmArgs = [];
+        $songs = [];
 
-        try {
-            $check = $nd->sshCommand('test -f ' . escapeshellarg($fullPath) . ' && echo EXISTS || echo NOTFOUND');
-            if (str_contains($check['output'], 'NOTFOUND')) {
-                return back()->with('error', "Fichier introuvable sur le serveur distant : {$fullPath}");
+        foreach ($ids as $id) {
+            try {
+                $song = $nd->getSong($id);
+                $songPath = $song['path'] ?? null;
+                if (!$songPath) {
+                    $errors[] = "{$song['title']} : chemin introuvable";
+                    continue;
+                }
+                $fullPath = $musicPath . '/' . ltrim($songPath, '/');
+                $rmArgs[] = escapeshellarg($fullPath);
+                $songs[$id] = ['title' => $song['title'] ?? '', 'path' => $fullPath];
+            } catch (\Exception $e) {
+                $errors[] = "ID {$id} : {$e->getMessage()}";
             }
-            if ($check['exitCode'] !== 0 && !str_contains($check['output'], 'EXISTS')) {
-                return back()->with('error', "Erreur SSH : {$check['output']}");
-            }
-
-            $result = $nd->sshCommand('rm ' . escapeshellarg($fullPath));
-            if ($result['exitCode'] !== 0) {
-                return back()->with('error', "Erreur suppression ({$fullPath}) : {$result['output']}");
-            }
-
-            $nd->triggerScan();
-            AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $song['title'] ?? '', 'path' => $fullPath]);
-            return back()->with('success', "« {$song['title']} » supprime ({$fullPath}). Scan Navidrome lance.");
-        } catch (\Exception $e) {
-            return back()->with('error', 'Erreur : ' . $e->getMessage());
         }
+
+        if (!empty($rmArgs)) {
+            try {
+                $result = $nd->sshCommand('rm ' . implode(' ', $rmArgs));
+                if ($result['exitCode'] === 0) {
+                    $deleted = count($rmArgs);
+                    foreach ($songs as $id => $info) {
+                        AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $info['title'], 'path' => $info['path']]);
+                    }
+                } else {
+                    $errors[] = $result['output'];
+                }
+            } catch (\Exception $e) {
+                $errors[] = $e->getMessage();
+            }
+        }
+
+        if ($deleted > 0) {
+            $nd->triggerScan();
+        }
+
+        $msg = $deleted > 0 ? "{$deleted} fichier(s) supprime(s). Scan Navidrome lance." : '';
+        if (!empty($errors)) {
+            $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
+            return back()->with($deleted > 0 ? 'success' : 'error', $msg);
+        }
+        return back()->with('success', $msg);
     }
 
     // ─── Audit Logs ───
