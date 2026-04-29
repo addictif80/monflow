@@ -98,7 +98,7 @@ class AuthController extends Controller
         \DB::table('email_verification_tokens')->where('email', $email)->delete();
 
         try { $mail->sendWelcome($user); } catch (\Exception $e) {}
-        Notification::push($user->id, 'welcome', 'Bienvenue sur MonFlow !', 'Votre compte est activé. Choisissez une formule pour commencer.', '/portal/plans');
+        Notification::send($user->id, 'welcome', 'Bienvenue sur MonFlow !', 'Votre compte est activé. Choisissez une formule pour commencer.', '/portal/plans');
 
         return redirect('/login')->with('success', 'Email confirmé ! Vous pouvez maintenant vous connecter.');
     }

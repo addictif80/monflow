@@ -15,7 +15,7 @@ class Notification extends Model
     public function user() { return $this->belongsTo(User::class); }
     public function scopeUnread($q) { return $q->whereNull('read_at'); }
 
-    public static function push(string $userId, string $type, string $title, string $body, ?string $link = null): static
+    public static function send(string $userId, string $type, string $title, string $body, ?string $link = null): static
     {
         return static::create(['user_id' => $userId, 'type' => $type, 'title' => $title, 'body' => $body, 'link' => $link]);
     }

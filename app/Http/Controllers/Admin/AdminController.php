@@ -458,7 +458,7 @@ class AdminController extends Controller
         $feedback->update(['ticket_id' => $ticket->id, 'status' => 'in_progress']);
 
         AuditLog::record('feedback.to_ticket', $feedback, ['ticket_id' => $ticket->id]);
-        Notification::push($feedback->user_id, 'support', 'Feedback pris en charge', "Votre feedback \"{$feedback->subject}\" a été transmis au support.", "/support/tickets/{$ticket->id}");
+        Notification::send($feedback->user_id, 'support', 'Feedback pris en charge', "Votre feedback \"{$feedback->subject}\" a été transmis au support.", "/support/tickets/{$ticket->id}");
 
         return redirect("/admin/tickets/{$ticket->id}")->with('success', 'Ticket créé à partir du feedback.');
     }

@@ -238,7 +238,7 @@ class DashboardController extends Controller
 
             Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $total, 'stripe_amount' => 0, 'status' => 'succeeded', 'payment_method' => 'wallet', 'description' => "{$plan->name} — {$months} mois (portefeuille)"]);
 
-            Notification::push($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
+            Notification::send($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
 
             if ($user->status === 'suspended') $user->update(['status' => 'active']);
             if ($user->navidrome_id) {
