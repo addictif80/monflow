@@ -67,7 +67,6 @@ class DashboardController extends Controller
         $user = Auth::user();
         if ($user->activeSubscription) return redirect('/portal')->with('error', 'Vous avez déjà un abonnement actif.');
 
-        // Durée de prépaiement (1 = abonnement récurrent standard, 3/6/12 = paiement unique prépayé)
         $months = (int) $request->input('months', 1);
         if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
 
@@ -77,17 +76,8 @@ class DashboardController extends Controller
             if ($promo && !$promo->is_valid) $promo = null;
         }
 
-        $baseAmount = $plan->price * $months;
-        $discount = 0;
-        if ($promo) {
-            $discount = $promo->discount_type === 'percentage'
-                ? round($baseAmount * $promo->discount_value / 100, 2)
-                : min($promo->discount_value, $baseAmount);
-        }
-        $finalAmount = max(0, $baseAmount - $discount);
-
-        if ($months === 1 && !$promo) {
-            // Abonnement récurrent classique via Stripe Subscription (sans promo)
+        if ($months === 1) {
+            // Abonnement récurrent Stripe (avec ou sans coupon promo)
             if (!$plan->stripe_price_id || !str_starts_with($plan->stripe_price_id, 'price_')) {
                 Log::error("Plan {$plan->id} ({$plan->name}) has an invalid stripe_price_id: " . ($plan->stripe_price_id ?? 'null'));
                 return redirect('/portal/plans')->with('error', 'Cette formule est mal configurée (Stripe Price ID manquant ou invalide). Merci de contacter le support.');
@@ -96,20 +86,28 @@ class DashboardController extends Controller
             try {
                 $session = $stripe->createCheckoutSession($user, $plan,
                     url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
-                    url('/portal/plans'));
+                    url('/portal/plans'),
+                    $promo);
             } catch (\Exception $e) {
                 Log::error("Stripe checkout failed for user {$user->id} plan {$plan->id}: {$e->getMessage()}");
                 return redirect('/portal/plans')->with('error', 'Impossible de démarrer le paiement. Merci de réessayer ou de contacter le support.');
             }
 
+            if ($promo) $promo->increment('current_uses');
             Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
             Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
             return redirect($session->url);
         }
 
-        // Paiement unique (prépayé ou 1 mois avec promo) — montant calculé avec réduction
-        $description = "{$plan->name} — {$months} mois";
-        if ($promo) $description .= " (code {$promo->code} : -{$discount}€)";
+        // Paiement unique prépayé (N mois d'avance, avec réduction éventuelle)
+        $baseAmount = $plan->price * $months;
+        $discount = 0;
+        if ($promo) {
+            $discount = $promo->discount_type === 'percentage'
+                ? round($baseAmount * $promo->discount_value / 100, 2)
+                : min($promo->discount_value, $baseAmount);
+        }
+        $finalAmount = max(0, $baseAmount - $discount);
 
         try {
             $session = $stripe->createPrepaySession($user, $plan, $months,
@@ -122,7 +120,6 @@ class DashboardController extends Controller
         }
 
         if ($promo) $promo->increment('current_uses');
-
         Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
         Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'pending', 'promo_code_id' => $promo?->id]);
         return redirect($session->url);
@@ -138,29 +135,29 @@ class DashboardController extends Controller
         $months = (int) $request->input('months', 1);
         if (!in_array($months, [1, 3, 6, 12], true)) $months = 1;
 
-        $promo = $sub->promoCode;
-        $baseAmount = $sub->plan->price * $months;
-        $discount = 0;
-        if ($promo && $promo->is_valid) {
-            $discount = $promo->discount_type === 'percentage'
-                ? round($baseAmount * $promo->discount_value / 100, 2)
-                : min($promo->discount_value, $baseAmount);
-        }
-        $finalAmount = max(0, $baseAmount - $discount);
+        $promo = ($sub->promoCode && $sub->promoCode->is_valid) ? $sub->promoCode : null;
 
         try {
-            if ($months === 1 && !$promo) {
+            if ($months === 1) {
                 if (!$sub->plan->stripe_price_id || !str_starts_with($sub->plan->stripe_price_id, 'price_')) {
                     return redirect('/portal/plans')->with('error', 'Formule mal configurée. Contactez le support.');
                 }
                 $session = $stripe->createCheckoutSession($user, $sub->plan,
                     url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
-                    url('/portal'));
+                    url('/portal'),
+                    $promo);
             } else {
+                $baseAmount = $sub->plan->price * $months;
+                $discount = 0;
+                if ($promo) {
+                    $discount = $promo->discount_type === 'percentage'
+                        ? round($baseAmount * $promo->discount_value / 100, 2)
+                        : min($promo->discount_value, $baseAmount);
+                }
                 $session = $stripe->createPrepaySession($user, $sub->plan, $months,
                     url('/payments/success?session_id={CHECKOUT_SESSION_ID}'),
                     url('/portal'),
-                    $finalAmount);
+                    max(0, $baseAmount - $discount));
             }
         } catch (\Exception $e) {
             Log::error("Stripe resume failed for user {$user->id}: {$e->getMessage()}");

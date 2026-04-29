@@ -4,11 +4,13 @@ namespace App\Services;
 
 use Stripe\Stripe;
 use Stripe\Customer;
+use Stripe\Coupon;
 use Stripe\Checkout\Session;
 use Stripe\Refund as StripeRefund;
 use Stripe\Subscription as StripeSub;
 use Stripe\Webhook;
 use App\Models\User;
+use App\Models\PromoCode;
 
 class StripeService
 {
@@ -26,10 +28,10 @@ class StripeService
         return $customer;
     }
 
-    public function createCheckoutSession(User $user, \App\Models\Plan $plan, string $successUrl, string $cancelUrl): Session
+    public function createCheckoutSession(User $user, \App\Models\Plan $plan, string $successUrl, string $cancelUrl, ?PromoCode $promo = null): Session
     {
         $customer = $this->getOrCreateCustomer($user);
-        return Session::create([
+        $params = [
             'customer' => $customer->id,
             'payment_method_types' => ['card'],
             'mode' => 'subscription',
@@ -37,7 +39,43 @@ class StripeService
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
             'metadata' => ['user_id' => $user->id, 'plan_id' => $plan->id],
-        ]);
+        ];
+
+        if ($promo) {
+            $coupon = $this->getOrCreateCoupon($promo);
+            $params['discounts'] = [['coupon' => $coupon->id]];
+        }
+
+        return Session::create($params);
+    }
+
+    public function getOrCreateCoupon(PromoCode $promo): Coupon
+    {
+        $couponId = 'monflow_' . $promo->id;
+        try {
+            return Coupon::retrieve($couponId);
+        } catch (\Exception $e) {}
+
+        $params = [
+            'id' => $couponId,
+            'currency' => 'eur',
+            'name' => "Promo {$promo->code}",
+        ];
+
+        if ($promo->discount_type === 'percentage') {
+            $params['percent_off'] = $promo->discount_value;
+        } else {
+            $params['amount_off'] = (int) round($promo->discount_value * 100);
+        }
+
+        if ($promo->is_recurring && $promo->recurring_months) {
+            $params['duration'] = 'repeating';
+            $params['duration_in_months'] = $promo->recurring_months;
+        } else {
+            $params['duration'] = 'once';
+        }
+
+        return Coupon::create($params);
     }
 
     public function createPrepaySession(User $user, \App\Models\Plan $plan, int $months, string $successUrl, string $cancelUrl, ?float $customAmount = null): Session

@@ -15,12 +15,14 @@ class PromoCode extends Model
     protected $fillable = [
         'code', 'discount_type', 'discount_value', 'max_uses',
         'current_uses', 'valid_from', 'valid_until', 'is_active',
+        'is_recurring', 'recurring_months',
     ];
 
     protected $casts = [
         'valid_from' => 'datetime',
         'valid_until' => 'datetime',
         'is_active' => 'boolean',
+        'is_recurring' => 'boolean',
     ];
 
     public function plans()

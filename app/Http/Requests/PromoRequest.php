@@ -21,6 +21,8 @@ class PromoRequest extends FormRequest
             'valid_from' => 'required|date',
             'valid_until' => 'nullable|date|after:valid_from',
             'is_active' => 'nullable|boolean',
+            'is_recurring' => 'nullable',
+            'recurring_months' => 'nullable|integer|min:1',
         ];
     }
 }

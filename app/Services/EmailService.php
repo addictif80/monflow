@@ -69,6 +69,7 @@ class EmailService
     public function sendDeleted(User $u): void { $this->sendTemplate('account_deleted', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
     public function sendGiftReceived(string $email, string $plan): void { $this->sendTemplate('gift_received', $email, ['plan' => $plan]); }
     public function sendRefund(User $u): void { $this->sendTemplate('refund_processed', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
+    public function sendRenewalReminder(User $u, \App\Models\Plan $plan, float $price, bool $promoEnding = false): void { $this->sendTemplate('renewal_reminder', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'plan_name' => $plan->name, 'price' => $price, 'promo_ending' => $promoEnding]); }
 
     public function testSmtp(SmtpConfiguration $smtp, string $testEmail): array
     {

@@ -210,7 +210,10 @@ class AdminController extends Controller
     public function promoCreate(Request $request)
     {
         if ($request->isMethod('post')) {
-            $promo = PromoCode::create($request->validate(['code' => 'required|unique:promo_codes', 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date']));
+            $data = $request->validate(['code' => 'required|unique:promo_codes', 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date', 'is_recurring' => 'nullable', 'recurring_months' => 'nullable|integer|min:1']);
+            $data['is_recurring'] = (bool) ($data['is_recurring'] ?? false);
+            if (!$data['is_recurring']) $data['recurring_months'] = null;
+            $promo = PromoCode::create($data);
             AuditLog::record('promo.create', $promo);
             return redirect('/admin/promos')->with('success', 'Code promo créé.');
         }
@@ -220,7 +223,10 @@ class AdminController extends Controller
     {
         $promo = PromoCode::findOrFail($id);
         if ($request->isMethod('post')) {
-            $promo->update($request->validate(['code' => "required|unique:promo_codes,code,{$id}", 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date', 'is_active' => 'nullable']));
+            $data = $request->validate(['code' => "required|unique:promo_codes,code,{$id}", 'discount_type' => 'required', 'discount_value' => 'required|numeric', 'max_uses' => 'nullable|integer', 'valid_from' => 'required|date', 'valid_until' => 'nullable|date', 'is_active' => 'nullable', 'is_recurring' => 'nullable', 'recurring_months' => 'nullable|integer|min:1']);
+            $data['is_recurring'] = (bool) ($data['is_recurring'] ?? false);
+            if (!$data['is_recurring']) $data['recurring_months'] = null;
+            $promo->update($data);
             AuditLog::record('promo.edit', $promo);
             return redirect('/admin/promos')->with('success', 'Code mis à jour.');
         }
