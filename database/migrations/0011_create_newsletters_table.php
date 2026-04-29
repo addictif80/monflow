@@ -8,19 +8,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('newsletters', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('subject');
-            $table->longText('html_body');
-            $table->enum('status', ['draft', 'sending', 'sent'])->default('draft');
-            $table->unsignedInteger('recipients_count')->default(0);
-            $table->timestamp('sent_at')->nullable();
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('newsletters')) {
+            Schema::create('newsletters', function (Blueprint $table) {
+                $table->uuid('id')->primary();
+                $table->string('subject');
+                $table->longText('html_body');
+                $table->enum('status', ['draft', 'sending', 'sent'])->default('draft');
+                $table->unsignedInteger('recipients_count')->default(0);
+                $table->timestamp('sent_at')->nullable();
+                $table->timestamps();
+            });
+        }
 
-        Schema::table('users', function (Blueprint $table) {
-            $table->boolean('newsletter_optin')->default(true)->after('stripe_customer_id');
-        });
+        if (!Schema::hasColumn('users', 'newsletter_optin')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->boolean('newsletter_optin')->default(true)->after('stripe_customer_id');
+            });
+        }
     }
 
     public function down(): void
