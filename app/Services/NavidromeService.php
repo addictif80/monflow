@@ -96,6 +96,10 @@ class NavidromeService
             }
         }
         if (empty($payload)) return [];
+        if (!isset($payload['userName'])) {
+            $user = $this->getUser($navidromeId);
+            $payload['userName'] = $user['userName'] ?? '';
+        }
         $data = $this->request('put', "/user/{$navidromeId}", $payload);
         Log::info("Navidrome: updated user {$navidromeId}");
         return $data;
@@ -103,7 +107,9 @@ class NavidromeService
 
     public function changePassword(string $navidromeId, string $newPassword): array
     {
+        $user = $this->getUser($navidromeId);
         $data = $this->request('put', "/user/{$navidromeId}", [
+            'userName' => $user['userName'] ?? $user['name'] ?? '',
             'password' => $newPassword,
         ]);
         Log::info("Navidrome: changed password for user {$navidromeId}");
