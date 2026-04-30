@@ -610,13 +610,8 @@ class AdminController extends Controller
 
         if (!empty($paths)) {
             try {
-                $fileList = implode("\n", $paths);
-                $remoteList = '/tmp/monflow_delete_' . uniqid() . '.txt';
-                $upload = $nd->sshWriteFile($remoteList, $fileList);
-                if ($upload['exitCode'] !== 0) {
-                    return back()->with('error', 'Erreur upload liste : ' . $upload['output']);
-                }
-                $result = $nd->sshCommand("xargs -d '\\n' rm -f < " . $remoteList . " && rm -f " . $remoteList);
+                $encoded = base64_encode(implode("\n", $paths));
+                $result = $nd->sshCommand("echo {$encoded} | base64 -d | tr '\\n' '\\0' | xargs -0 rm -f");
                 if ($result['exitCode'] === 0) {
                     $deleted = count($paths);
                     foreach ($songs as $id => $info) {
