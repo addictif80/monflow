@@ -238,15 +238,17 @@ class NavidromeService
         return $this->request('get', "/song?{$query}");
     }
 
-    public function triggerScan(): void
+    public function triggerScan(bool $full = false): void
     {
         $salt = bin2hex(random_bytes(6));
         $token = md5($this->adminPassword . $salt);
         $publicUrl = rtrim(config('navidrome.public_url'), '/');
-        Http::timeout(10)->get("{$publicUrl}/rest/startScan.view", [
+        $params = [
             'u' => $this->adminUser, 't' => $token, 's' => $salt,
             'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json',
-        ]);
+        ];
+        if ($full) $params['fullScan'] = 'true';
+        Http::timeout(10)->get("{$publicUrl}/rest/startScan.view", $params);
     }
 
     private function sshPrefix(): string
