@@ -629,12 +629,11 @@ class AdminController extends Controller
             $nd->triggerScan(true);
         }
 
-        $msg = $deleted > 0 ? "{$deleted} fichier(s) supprime(s). Scan Navidrome lance." : '';
+        $msg = $deleted > 0 ? "{$deleted} fichier(s) supprime(s). Le scan complet Navidrome est en cours, patientez quelques instants avant de rescanner." : '';
         if (!empty($errors)) {
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
-            return back()->with($deleted > 0 ? 'success' : 'error', $msg);
         }
-        return back()->with('success', $msg);
+        return redirect('/admin/duplicates')->with($deleted > 0 ? 'success' : 'error', $msg);
     }
 
     // ─── Audit Logs ───

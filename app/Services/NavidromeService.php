@@ -49,7 +49,7 @@ class NavidromeService
 
         $doRequest = function () use ($method, $endpoint, $data) {
             return Http::timeout(10)
-                ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}"])
+                ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}", 'Cache-Control' => 'no-cache'])
                 ->$method("{$this->baseUrl}/api{$endpoint}", $data);
         };
 
