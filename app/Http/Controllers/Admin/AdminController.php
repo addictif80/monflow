@@ -626,7 +626,7 @@ class AdminController extends Controller
         }
 
         if ($deleted > 0) {
-            $nd->triggerScan();
+            $nd->triggerScan(true);
         }
 
         $msg = $deleted > 0 ? "{$deleted} fichier(s) supprime(s). Scan Navidrome lance." : '';
