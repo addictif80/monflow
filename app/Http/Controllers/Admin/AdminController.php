@@ -554,29 +554,49 @@ class AdminController extends Controller
     public function duplicates(Request $request, NavidromeService $nd)
     {
         $duplicates = [];
+        $crossAlbum = [];
         $scanned = false;
+        $mode = $request->input('mode', 'exact');
 
         if ($request->has('scan')) {
             $scanned = true;
             try {
                 $allSongs = $nd->getAllSongs(0, 10000, 'title', 'ASC');
-                $grouped = [];
+
+                $byTitleArtist = [];
                 foreach ($allSongs as $song) {
                     $key = mb_strtolower(trim($song['title'] ?? '')) . '|||' . mb_strtolower(trim($song['artist'] ?? ''));
-                    $grouped[$key][] = $song;
+                    $byTitleArtist[$key][] = $song;
                 }
-                foreach ($grouped as $group) {
-                    if (count($group) > 1) {
-                        $duplicates[] = $group;
+
+                foreach ($byTitleArtist as $group) {
+                    if (count($group) < 2) continue;
+
+                    $byAlbum = [];
+                    foreach ($group as $song) {
+                        $albumKey = mb_strtolower(trim($song['album'] ?? ''));
+                        $byAlbum[$albumKey][] = $song;
+                    }
+
+                    foreach ($byAlbum as $albumGroup) {
+                        if (count($albumGroup) > 1) {
+                            $duplicates[] = $albumGroup;
+                        }
+                    }
+
+                    if (count($byAlbum) > 1) {
+                        $crossAlbum[] = $group;
                     }
                 }
+
                 usort($duplicates, fn ($a, $b) => strcasecmp($a[0]['title'] ?? '', $b[0]['title'] ?? ''));
+                usort($crossAlbum, fn ($a, $b) => strcasecmp($a[0]['title'] ?? '', $b[0]['title'] ?? ''));
             } catch (\Exception $e) {
                 return back()->with('error', 'Erreur lors du scan : ' . $e->getMessage());
             }
         }
 
-        return view('admin.duplicates.index', compact('duplicates', 'scanned'));
+        return view('admin.duplicates.index', compact('duplicates', 'crossAlbum', 'scanned', 'mode'));
     }
 
     public function duplicateBatchDelete(Request $request, NavidromeService $nd)
