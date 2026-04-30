@@ -589,7 +589,7 @@ class AdminController extends Controller
         $musicPath = config('navidrome.music_path');
         $deleted = 0;
         $errors = [];
-        $rmArgs = [];
+        $paths = [];
         $songs = [];
 
         foreach ($ids as $id) {
@@ -601,18 +601,24 @@ class AdminController extends Controller
                     continue;
                 }
                 $fullPath = $musicPath . '/' . ltrim($songPath, '/');
-                $rmArgs[] = escapeshellarg($fullPath);
+                $paths[] = $fullPath;
                 $songs[$id] = ['title' => $song['title'] ?? '', 'path' => $fullPath];
             } catch (\Exception $e) {
                 $errors[] = "ID {$id} : {$e->getMessage()}";
             }
         }
 
-        if (!empty($rmArgs)) {
+        if (!empty($paths)) {
             try {
-                $result = $nd->sshCommand('rm ' . implode(' ', $rmArgs));
+                $fileList = implode("\n", $paths);
+                $remoteList = '/tmp/monflow_delete_' . uniqid() . '.txt';
+                $upload = $nd->sshWriteFile($remoteList, $fileList);
+                if ($upload['exitCode'] !== 0) {
+                    return back()->with('error', 'Erreur upload liste : ' . $upload['output']);
+                }
+                $result = $nd->sshCommand("xargs -d '\\n' rm -f < " . $remoteList . " && rm -f " . $remoteList);
                 if ($result['exitCode'] === 0) {
-                    $deleted = count($rmArgs);
+                    $deleted = count($paths);
                     foreach ($songs as $id => $info) {
                         AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $info['title'], 'path' => $info['path']]);
                     }
