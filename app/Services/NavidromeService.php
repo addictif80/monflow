@@ -284,20 +284,21 @@ class NavidromeService
         return $prefix . "scp {$sshOpts}";
     }
 
-    private function sudoWrap(string $cmd): string
+    private function sudoPrefix(): string
     {
         $sudoPass = config('navidrome.sudo_password') ?: config('navidrome.ssh_password');
-        return 'echo ' . escapeshellarg($sudoPass) . ' | sudo -S -i bash -c ' . escapeshellarg($cmd);
+        return 'echo ' . escapeshellarg($sudoPass) . ' | sudo -S';
     }
 
     public function sshCommand(string $cmd): array
     {
         $remoteCmd = config('navidrome.ssh_sudo')
-            ? $this->sudoWrap($cmd)
+            ? $this->sudoPrefix() . ' ' . $cmd
             : $cmd;
         $fullCmd = $this->sshPrefix() . ' ' . escapeshellarg($remoteCmd);
         exec($fullCmd . ' 2>&1', $output, $exitCode);
-        return ['output' => implode("\n", $output), 'exitCode' => $exitCode];
+        $filtered = array_filter($output, fn ($l) => !str_contains($l, '[sudo]') && !str_contains($l, 'password for'));
+        return ['output' => implode("\n", $filtered), 'exitCode' => $exitCode];
     }
 
     public function sshWriteFile(string $remotePath, string $content): array
@@ -324,10 +325,11 @@ class NavidromeService
         $escapedDir = escapeshellarg(dirname($remotePath));
         $escapedPath = escapeshellarg($remotePath);
         $escapedTmp = escapeshellarg($remoteTmp);
-        $moveCmd = "mkdir -p {$escapedDir} && mv -f {$escapedTmp} {$escapedPath}";
 
         if ($useSudo) {
-            $moveCmd = $this->sudoWrap($moveCmd);
+            $moveCmd = $this->sudoPrefix() . " sh -c " . escapeshellarg("mkdir -p {$escapedDir} && mv -f {$escapedTmp} {$escapedPath}");
+        } else {
+            $moveCmd = "mkdir -p {$escapedDir} && mv -f {$escapedTmp} {$escapedPath}";
         }
 
         $sshMoveCmd = $this->sshPrefix() . ' ' . escapeshellarg($moveCmd);
