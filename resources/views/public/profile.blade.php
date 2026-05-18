@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>#{{ $user->display_name }} — MonFlow</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen">
 <div class="max-w-2xl mx-auto px-4 py-12">

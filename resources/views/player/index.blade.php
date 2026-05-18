@@ -2,8 +2,22 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<meta name="theme-color" content="#4f46e5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MonFlow">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+{{-- iOS splash screens --}}
+<link rel="apple-touch-startup-image" href="/icons/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/icons/splash-2048x2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)">
 <title>Lecteur — MonFlow</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
@@ -15,21 +29,35 @@
     .scroll::-webkit-scrollbar { width: 8px; }
     .scroll::-webkit-scrollbar-track { background: #1e293b; }
     .scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    /* Mobile: sidebar drawer */
+    #sidebar { transition: transform 0.25s ease; }
+    @media (max-width: 639px) {
+        #sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 300; transform: translateX(-100%); width: 240px; }
+        #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.6); }
+        #sidebarBackdrop { display: none; }
+        #sidebarBackdrop.open { display: block; }
+        #searchInput { width: 140px !important; }
+    }
 </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden">
 
-<header class="card border-b flex items-center justify-between px-4 h-14 shrink-0">
-    <div class="flex items-center gap-4">
-        <button onclick="openPortalOverlay()" class="text-indigo-400 hover:text-indigo-300 text-sm">☰ Mon compte</button>
-        <h1 class="text-lg font-bold text-indigo-400">🎵 MonFlow Lecteur</h1>
+<header class="card border-b flex items-center justify-between px-4 h-14 shrink-0 gap-2">
+    <div class="flex items-center gap-3">
+        {{-- Mobile: hamburger pour ouvrir sidebar --}}
+        <button id="sidebarToggle" class="sm:hidden text-slate-400 hover:text-white text-xl leading-none" aria-label="Menu">☰</button>
+        <button onclick="openPortalOverlay()" class="hidden sm:inline text-indigo-400 hover:text-indigo-300 text-sm">☰ Mon compte</button>
+        <h1 class="text-base sm:text-lg font-bold text-indigo-400">🎵 MonFlow</h1>
     </div>
-    <div class="flex items-center gap-2">
-        <input id="searchInput" type="text" placeholder="Rechercher artiste, album, titre..." class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm w-80 focus:outline-none focus:border-indigo-500">
-        <button id="searchBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm">Rechercher</button>
+    <div class="flex items-center gap-2 flex-1 justify-center sm:justify-end max-w-xl">
+        <input id="searchInput" type="text" placeholder="Rechercher…" class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm w-full sm:w-80 focus:outline-none focus:border-indigo-500">
+        <button id="searchBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm whitespace-nowrap">🔍</button>
     </div>
-    <div class="text-sm text-slate-400">{{ Auth::user()->username }}</div>
+    <div class="hidden sm:block text-sm text-slate-400 whitespace-nowrap">{{ Auth::user()->username }}</div>
 </header>
+
+{{-- Mobile: backdrop quand sidebar ouverte --}}
+<div id="sidebarBackdrop" class="fixed inset-0 bg-black/50 z-[299] sm:hidden" onclick="closeSidebar()"></div>
 
 <main class="flex-1 flex overflow-hidden relative">
     <div id="portalOverlay" class="hidden absolute inset-0 z-[200]" style="background:#0f172a">
@@ -39,7 +67,12 @@
             ✕ Retour au lecteur
         </button>
     </div>
-    <aside class="w-48 card border-r p-3 shrink-0 flex flex-col gap-1 text-sm">
+    <aside id="sidebar" class="w-48 sm:w-48 card border-r p-3 shrink-0 flex flex-col gap-1 text-sm overflow-y-auto">
+        {{-- Mobile: boutons Mon compte + fermer en haut --}}
+        <div class="flex items-center justify-between mb-2 sm:hidden">
+            <button onclick="openPortalOverlay()" class="text-indigo-400 text-xs">☰ Mon compte</button>
+            <button onclick="closeSidebar()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
+        </div>
         <button data-view="artists" class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700">Artistes</button>
         <button data-view="albums" class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700">Albums récents</button>
         <button data-view="random" class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700">Lecture aléatoire</button>
@@ -74,16 +107,25 @@
     </section>
 </main>
 
-<footer class="card border-t h-20 shrink-0 flex items-center px-4 gap-4">
-    <div class="flex items-center gap-3 min-w-0 w-80">
-        <div id="coverArt" class="w-12 h-12 bg-slate-900 rounded flex items-center justify-center text-2xl">🎵</div>
-        <div class="min-w-0">
+<footer class="card border-t shrink-0 px-3 sm:px-4 py-2 sm:py-0 sm:h-20 flex flex-col sm:flex-row items-center gap-1 sm:gap-4" style="padding-bottom: env(safe-area-inset-bottom, 0)">
+    {{-- Track info --}}
+    <div class="flex items-center gap-3 w-full sm:min-w-0 sm:w-80">
+        <div id="coverArt" class="w-10 h-10 sm:w-12 sm:h-12 bg-slate-900 rounded flex items-center justify-center text-2xl flex-shrink-0">🎵</div>
+        <div class="min-w-0 flex-1">
             <div id="trackTitle" class="text-sm font-medium truncate">Aucune piste</div>
             <div id="trackArtist" class="text-xs text-slate-400 truncate">—</div>
         </div>
+        {{-- Mobile-only: heart + controls inline --}}
+        <div class="flex items-center gap-2 sm:hidden flex-shrink-0">
+            <button id="addToPlaylistBtnMobile" class="hidden text-slate-400 text-lg" title="Ajouter à une playlist">♡</button>
+            <button id="prevBtnMobile" class="text-slate-400 text-xl">⏮</button>
+            <button id="playBtnMobile" class="w-9 h-9 bg-white text-slate-900 rounded-full text-lg flex items-center justify-center">▶</button>
+            <button id="nextBtnMobile" class="text-slate-400 text-xl">⏭</button>
+        </div>
     </div>
-    <div class="flex-1 flex flex-col items-center gap-1">
-        <div class="flex items-center gap-3">
+    {{-- Progress + desktop controls --}}
+    <div class="flex-1 flex flex-col items-center gap-1 w-full">
+        <div class="hidden sm:flex items-center gap-3">
             <button id="prevBtn" class="text-slate-400 hover:text-white text-xl" title="Précédent">⏮</button>
             <button id="playBtn" class="w-10 h-10 bg-white text-slate-900 rounded-full text-xl flex items-center justify-center hover:scale-105 transition">▶</button>
             <button id="nextBtn" class="text-slate-400 hover:text-white text-xl" title="Suivant">⏭</button>
@@ -94,7 +136,8 @@
             <span id="totTime" class="text-xs text-slate-400 w-10">0:00</span>
         </div>
     </div>
-    <div class="flex items-center gap-2 w-56 justify-end">
+    {{-- Desktop: heart + volume --}}
+    <div class="hidden sm:flex items-center gap-2 w-56 justify-end">
         <button id="addToPlaylistBtn" class="hidden flex items-center gap-1 text-sm px-2 py-1 rounded hover:bg-slate-700 transition" title="Ajouter à une playlist">
             <span id="addToPlaylistHeart" class="text-slate-400">♡</span>
             <span id="addToPlaylistLabel" class="text-xs text-slate-400 max-w-[100px] truncate hidden"></span>
@@ -434,16 +477,35 @@ function playIndex(i) {
     document.getElementById('trackTitle').textContent = s.title || '—';
     document.getElementById('trackArtist').textContent = `${s.artist || ''} · ${s.album || ''}`;
     document.getElementById('playBtn').textContent = '⏸';
+    document.getElementById('playBtnMobile').textContent = '⏸';
     const cover = document.getElementById('coverArt');
+    const artworkUrl = coverUrl(s.coverArt || s.id, 300);
     if (s.coverArt || s.id) {
         cover.innerHTML = `<img src="${coverUrl(s.coverArt || s.id, 100)}" class="w-full h-full object-cover rounded" onerror="this.parentElement.innerHTML='🎵'">`;
     }
     renderQueue();
     if (lyricsVisible) loadLyrics();
     document.getElementById('addToPlaylistBtn').classList.remove('hidden');
+    document.getElementById('addToPlaylistBtnMobile').classList.remove('hidden');
     document.getElementById('saveQueueBtn').classList.remove('hidden');
     updateAddToPlaylistBtn(s.id);
     saveStateToStorage();
+    // ─── Media Session API (lock screen / CarPlay / Android Auto) ───
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title:  s.title  || '—',
+            artist: s.artist || '',
+            album:  s.album  || '',
+            artwork: [
+                { src: artworkUrl, sizes: '300x300', type: 'image/jpeg' },
+            ],
+        });
+        navigator.mediaSession.setActionHandler('play',          () => { audio.play(); document.getElementById('playBtn').textContent = '⏸'; document.getElementById('playBtnMobile').textContent = '⏸'; });
+        navigator.mediaSession.setActionHandler('pause',         () => { audio.pause(); document.getElementById('playBtn').textContent = '▶'; document.getElementById('playBtnMobile').textContent = '▶'; });
+        navigator.mediaSession.setActionHandler('previoustrack', () => playIndex(state.currentIndex - 1));
+        navigator.mediaSession.setActionHandler('nexttrack',     () => playIndex(state.currentIndex + 1));
+        navigator.mediaSession.setActionHandler('seekto',        e  => { if (e.seekTime !== undefined) audio.currentTime = e.seekTime; });
+    }
 }
 
 function renderQueue() {
@@ -460,13 +522,25 @@ function renderQueue() {
 }
 
 // ─── Controls ───
-document.getElementById('playBtn').onclick = () => {
+function togglePlay() {
     if (!audio.src) return;
-    if (audio.paused) { audio.play(); document.getElementById('playBtn').textContent = '⏸'; }
-    else { audio.pause(); document.getElementById('playBtn').textContent = '▶'; }
+    if (audio.paused) audio.play();
+    else audio.pause();
+}
+audio.addEventListener('play',  () => { document.getElementById('playBtn').textContent = '⏸'; document.getElementById('playBtnMobile').textContent = '⏸'; if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+audio.addEventListener('pause', () => { document.getElementById('playBtn').textContent = '▶'; document.getElementById('playBtnMobile').textContent = '▶'; if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+
+document.getElementById('playBtn').onclick       = togglePlay;
+document.getElementById('playBtnMobile').onclick = togglePlay;
+document.getElementById('prevBtn').onclick       = () => playIndex(state.currentIndex - 1);
+document.getElementById('nextBtn').onclick       = () => playIndex(state.currentIndex + 1);
+document.getElementById('prevBtnMobile').onclick = () => playIndex(state.currentIndex - 1);
+document.getElementById('nextBtnMobile').onclick = () => playIndex(state.currentIndex + 1);
+document.getElementById('addToPlaylistBtnMobile').onclick = () => {
+    const s = state.queue[state.currentIndex];
+    if (!s) return;
+    openPlaylistPicker(s.id, s.title);
 };
-document.getElementById('prevBtn').onclick = () => playIndex(state.currentIndex - 1);
-document.getElementById('nextBtn').onclick = () => playIndex(state.currentIndex + 1);
 audio.addEventListener('ended', () => playIndex(state.currentIndex + 1));
 audio.addEventListener('timeupdate', () => {
     const p = document.getElementById('progress');
@@ -687,6 +761,7 @@ async function loadWeekAlbums() {
 // ─── Navigation ───
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.onclick = () => {
+        if (window.innerWidth < 640) closeSidebar();
         const view = btn.dataset.view;
         if (view === 'artists') loadArtists();
         else if (view === 'albums') loadAlbums();
@@ -967,21 +1042,16 @@ function openPlaylistPicker(songId, songTitle) {
 }
 
 function updateAddToPlaylistBtn(songId) {
-    const heart = document.getElementById('addToPlaylistHeart');
-    const label = document.getElementById('addToPlaylistLabel');
-    if (!heart) return;
+    const heart  = document.getElementById('addToPlaylistHeart');
+    const label  = document.getElementById('addToPlaylistLabel');
+    const heartM = document.getElementById('addToPlaylistBtnMobile');
     const pl = songId ? songPlaylistMap.get(songId) : null;
-    if (pl) {
-        heart.textContent = '♥';
-        heart.className = 'text-indigo-400';
-        label.textContent = pl;
-        label.classList.remove('hidden');
-    } else {
-        heart.textContent = '♡';
-        heart.className = 'text-slate-400';
-        label.textContent = '';
-        label.classList.add('hidden');
+    if (heart) {
+        heart.textContent = pl ? '♥' : '♡';
+        heart.className   = pl ? 'text-indigo-400' : 'text-slate-400';
     }
+    if (label) { label.textContent = pl || ''; pl ? label.classList.remove('hidden') : label.classList.add('hidden'); }
+    if (heartM) heartM.textContent = pl ? '♥' : '♡';
 }
 
 async function addCurrentToPlaylist(playlistId, playlistName) {
@@ -1105,6 +1175,22 @@ audio.addEventListener('play',  saveStateToStorage);
     // Clean URL without reloading
     history.replaceState({}, '', '/player');
 })();
+
+// ─── Sidebar mobile ───
+function openSidebar() {
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('sidebarBackdrop').classList.add('open');
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarBackdrop').classList.remove('open');
+}
+document.getElementById('sidebarToggle').onclick = openSidebar;
+
+// ─── Service Worker (PWA) ───
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 
 // ─── Init ───
 loadArtists();

@@ -6,6 +6,9 @@
     <title>@yield('title', 'Admin — MonFlow')</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex">
     <aside class="w-56 bg-gray-800 border-r border-gray-700 min-h-screen p-4 flex flex-col gap-1 text-sm">
