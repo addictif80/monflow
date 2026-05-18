@@ -325,39 +325,26 @@ class DashboardController extends Controller
 
         $wallet = $user->wallet;
         $transactions = $wallet
-            ? WalletTransaction::where('wallet_id', $wallet->id)->orderBy('created_at')->get(['type', 'amount', 'description', 'created_at'])
+            ? WalletTransaction::where('wallet_id', $wallet->id)->orderBy('created_at')->get()
             : collect();
 
-        $tickets = Ticket::where('user_id', $user->id)->with(['messages' => fn($q) => $q->select('ticket_id', 'body', 'is_staff_reply', 'created_at')])->get(['id', 'subject', 'status', 'created_at']);
+        $tickets = Ticket::where('user_id', $user->id)
+            ->with(['messages' => fn($q) => $q->orderBy('created_at')])
+            ->latest()->get();
 
-        $data = [
-            'export_date' => now()->toIso8601String(),
-            'profil' => [
-                'username'   => $user->username,
-                'email'      => $user->email,
-                'prenom'     => $user->first_name,
-                'nom'        => $user->last_name,
-                'telephone'  => $user->phone,
-                'newsletter' => $user->newsletter_optin,
-                'statut'     => $user->status,
-                'inscription'=> $user->created_at?->toIso8601String(),
-            ],
-            'abonnements' => Subscription::where('user_id', $user->id)->with('plan:id,name,price,billing_cycle')->get(['plan_id', 'status', 'current_period_start', 'current_period_end', 'cancelled_at', 'created_at']),
-            'paiements' => Payment::where('user_id', $user->id)->get(['amount', 'status', 'payment_method', 'description', 'created_at']),
-            'portefeuille' => [
-                'solde' => $wallet?->balance ?? 0,
-                'transactions' => $transactions,
-            ],
-            'tickets_support' => $tickets,
-            'feedbacks' => Feedback::where('user_id', $user->id)->get(['type', 'subject', 'body', 'status', 'created_at']),
-            'appareils' => UserDevice::where('user_id', $user->id)->get(['device_name', 'device_type', 'ip_address', 'is_active', 'last_active', 'created_at']),
-        ];
+        $subscriptions = Subscription::where('user_id', $user->id)->with('plan')->latest()->get();
+        $payments      = Payment::where('user_id', $user->id)->latest()->get();
+        $feedbacks     = Feedback::where('user_id', $user->id)->latest()->get();
+        $devices       = UserDevice::where('user_id', $user->id)->latest('last_active')->get();
 
-        $filename = 'monflow-export-' . now()->format('Y-m-d') . '.json';
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $filename = 'monflow-export-' . now()->format('Y-m-d') . '.html';
+        $html = view('portal.export-data', compact(
+            'user', 'wallet', 'transactions', 'subscriptions',
+            'payments', 'tickets', 'feedbacks', 'devices'
+        ))->render();
 
-        return response($json, 200, [
-            'Content-Type'        => 'application/json',
+        return response($html, 200, [
+            'Content-Type'        => 'text/html; charset=utf-8',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
