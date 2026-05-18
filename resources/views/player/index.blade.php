@@ -812,7 +812,8 @@ async function deletePlaylistFromPlayer(pl) {
 }
 
 function renderPublicToggle(btn, memberInfo, info, playlistId) {
-    const isOwner = info.role === 'owner';
+    // role === null means the playlist isn't registered in MonFlow yet → belongs to the current user
+    const isOwner = info.role === 'owner' || info.role === null;
     const isPublic = info.is_public;
     btn.className = `px-2 py-1 rounded transition text-xs ${isPublic ? 'bg-green-700/50 text-green-300 hover:bg-green-700' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`;
     btn.textContent = isPublic ? '🌐 Publique' : '🔒 Privée';
