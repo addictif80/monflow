@@ -17,6 +17,7 @@
                 <a href="/portal/wallet" class="hover:text-indigo-400">Portefeuille</a>
                 <a href="/portal/payments" class="hover:text-indigo-400">Paiements</a>
                 <a href="/portal/devices" class="hover:text-indigo-400">Appareils</a>
+                <a href="/portal/playlists" class="hover:text-indigo-400">Playlists</a>
                 <a href="/support/tickets" class="hover:text-indigo-400">Support</a>
                 <a href="/portal/feedback" class="hover:text-indigo-400">Feedback</a>
                 <a href="/player" class="hover:text-indigo-400 text-indigo-300 font-medium">Lecteur</a>

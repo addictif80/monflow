@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\TicketController;
+use App\Http\Controllers\Portal\PlaylistController;
 use App\Http\Controllers\Portal\DeemixProxyController;
 use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Route;
@@ -85,6 +86,16 @@ Route::middleware('auth')->group(function () {
 
     // Invoice PDF
     Route::get('/portal/payments/{id}/invoice', [DashboardController::class, 'invoice']);
+
+    // Playlists
+    Route::get('/portal/playlists', [PlaylistController::class, 'index']);
+    Route::post('/portal/playlists', [PlaylistController::class, 'store']);
+    Route::get('/portal/playlists/search', [PlaylistController::class, 'search']);
+    Route::get('/portal/playlists/{id}', [PlaylistController::class, 'show']);
+    Route::put('/portal/playlists/{id}', [PlaylistController::class, 'update']);
+    Route::delete('/portal/playlists/{id}', [PlaylistController::class, 'destroy']);
+    Route::post('/portal/playlists/{id}/tracks', [PlaylistController::class, 'addTracks']);
+    Route::delete('/portal/playlists/{id}/tracks', [PlaylistController::class, 'removeTrack']);
 
     // GDPR data export
     Route::get('/portal/export-data', [DashboardController::class, 'exportData']);

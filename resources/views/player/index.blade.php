@@ -42,8 +42,18 @@
             <button data-view="weekAlbums" class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700 w-full">Ajouts de la semaine</button>
         </div>
         <div class="border-t border-slate-700 mt-3 pt-3">
-            <div class="text-xs text-slate-500 uppercase mb-2 px-3">File d'attente (<span id="queueCount">0</span>)</div>
-            <div id="queueList" class="space-y-1 scroll overflow-y-auto max-h-64"></div>
+            <div class="flex items-center justify-between mb-2 px-3">
+                <div class="text-xs text-slate-500 uppercase">File d'attente (<span id="queueCount">0</span>)</div>
+                <button id="saveQueueBtn" class="text-xs text-indigo-400 hover:text-indigo-300 hidden" title="Sauvegarder la file comme playlist">💾</button>
+            </div>
+            <div id="queueList" class="space-y-1 scroll overflow-y-auto max-h-40"></div>
+        </div>
+        <div class="border-t border-slate-700 mt-3 pt-3">
+            <div class="flex items-center justify-between mb-2 px-3">
+                <div class="text-xs text-slate-500 uppercase">Playlists</div>
+                <button id="newPlaylistPlayerBtn" class="text-xs text-indigo-400 hover:text-indigo-300" title="Nouvelle playlist">+</button>
+            </div>
+            <div id="playlistNavList" class="space-y-1 scroll overflow-y-auto max-h-52"></div>
         </div>
     </aside>
 
@@ -76,7 +86,8 @@
             <span id="totTime" class="text-xs text-slate-400 w-10">0:00</span>
         </div>
     </div>
-    <div class="flex items-center gap-2 w-48 justify-end">
+    <div class="flex items-center gap-2 w-56 justify-end">
+        <button id="addToPlaylistBtn" class="text-slate-400 hover:text-indigo-400 text-sm px-2 py-1 rounded hover:bg-slate-700 hidden" title="Ajouter à une playlist">♡</button>
         <button id="lyricsBtn" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-slate-700" title="Paroles">Aa</button>
         <span class="text-slate-400">🔊</span>
         <input id="volume" type="range" min="0" max="100" value="80" class="w-24 accent-indigo-500">
@@ -92,6 +103,35 @@
 </div>
 
 <audio id="audio"></audio>
+
+{{-- Playlist modals --}}
+<div id="playlistPickerModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
+    <div class="bg-slate-800 border border-slate-600 rounded-xl p-5 w-80 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-sm">Ajouter à une playlist</h3>
+            <button onclick="document.getElementById('playlistPickerModal').style.display='none'" class="text-slate-400 hover:text-white">&times;</button>
+        </div>
+        <div id="pickerSongInfo" class="text-xs text-slate-400 mb-3 truncate"></div>
+        <div id="pickerList" class="space-y-1 max-h-48 overflow-y-auto mb-3"></div>
+        <button onclick="openNewPlaylistFromPicker()"
+            class="w-full py-1.5 border border-dashed border-slate-600 hover:border-indigo-500 text-slate-400 hover:text-indigo-400 rounded text-xs transition">
+            + Nouvelle playlist
+        </button>
+    </div>
+</div>
+
+<div id="newPlaylistModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
+    <div class="bg-slate-800 border border-slate-600 rounded-xl p-5 w-72 shadow-xl">
+        <h3 class="font-semibold text-sm mb-3">Nouvelle playlist</h3>
+        <input id="newPlaylistName" type="text" placeholder="Nom…" maxlength="200"
+            class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 mb-3">
+        <div id="newPlaylistSongId" data-song-id=""></div>
+        <div class="flex gap-2">
+            <button onclick="closeNewPlaylistModal()" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs transition">Annuler</button>
+            <button onclick="createAndAddPlaylist()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">Créer</button>
+        </div>
+    </div>
+</div>
 
 <script>
 const ND = {
@@ -628,8 +668,185 @@ function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ─── Playlists ───
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+let playerPlaylists = [];
+let pickerTargetSongId = null;
+let pickerTargetSongTitle = null;
+
+async function portalApi(method, url, body = null) {
+    const opts = { method, headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Erreur ${r.status}`); }
+    return r.json();
+}
+
+function playerToast(msg, ok = true) {
+    const el = document.createElement('div');
+    el.className = `fixed bottom-24 right-4 z-[9999] px-3 py-2 rounded text-xs font-medium shadow-lg ${ok ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+}
+
+async function loadPlayerPlaylists() {
+    try {
+        const data = await portalApi('GET', '/portal/playlists');
+        // Response is the view HTML when GET /portal/playlists returns a view — we need JSON
+        // Instead use a dedicated JSON endpoint via the existing show route with a special list call
+        // Actually loadPlayerPlaylists calls the full page; we'll parse JSON from the index action
+        // The index action returns a view, not JSON — so we do a workaround:
+        // fetch the playlists from Subsonic directly since we have ndCall available
+        const resp = await ndCall('getPlaylists.view');
+        const raw = resp.playlists?.playlist || [];
+        playerPlaylists = Array.isArray(raw) ? raw : (raw.id ? [raw] : []);
+        renderPlaylistNav();
+    } catch(e) {
+        document.getElementById('playlistNavList').innerHTML = '<div class="px-3 text-xs text-slate-500">Indisponible</div>';
+    }
+}
+
+function renderPlaylistNav() {
+    const el = document.getElementById('playlistNavList');
+    if (!playerPlaylists.length) {
+        el.innerHTML = '<div class="px-3 text-xs text-slate-500 italic">Aucune playlist</div>';
+        return;
+    }
+    el.innerHTML = playerPlaylists.map(pl => `
+        <button class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700 w-full text-xs truncate" onclick="loadPlaylistInPlayer('${pl.id}', ${JSON.stringify(pl.name)})">
+            ♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>
+        </button>`).join('');
+}
+
+async function loadPlaylistInPlayer(id, name) {
+    viewTitle.textContent = name;
+    mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement…</div>';
+    try {
+        const resp = await ndCall('getPlaylist.view', { id });
+        let songs = resp.playlist?.entry || [];
+        if (songs.id) songs = [songs]; // single entry normalisation
+        viewCount.textContent = `${songs.length} titre(s)`;
+        const container = document.createElement('div');
+        container.className = 'space-y-1';
+        const header = document.createElement('div');
+        header.className = 'mb-4 flex gap-2';
+        header.innerHTML = `
+            <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium">▶ Tout lire</button>
+            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">+ File d'attente</button>`;
+        header.children[0].onclick = () => { state.queue = [...songs]; playIndex(0); };
+        header.children[1].onclick = () => { state.queue.push(...songs); renderQueue(); };
+        container.appendChild(header);
+        songs.forEach((s, i) => {
+            const el = document.createElement('div');
+            el.className = 'list-item flex items-center gap-3 px-3 py-2 rounded cursor-pointer text-sm group';
+            el.innerHTML = `
+                <span class="w-6 text-slate-500">${i+1}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="truncate">${escapeHtml(s.title)}</div>
+                    <div class="text-xs text-slate-400 truncate">${escapeHtml(s.artist||'')}${s.album?' · '+escapeHtml(s.album):''}</div>
+                </div>
+                <span class="text-xs text-slate-500">${formatTime(s.duration||0)}</span>`;
+            el.onclick = () => { state.queue = [...songs]; playIndex(i); };
+            container.appendChild(el);
+        });
+        mainArea.innerHTML = '';
+        mainArea.appendChild(container);
+    } catch(e) {
+        mainArea.innerHTML = `<div class="text-red-400 text-center py-8 text-sm">${escapeHtml(e.message)}</div>`;
+    }
+}
+
+// Save current queue as new playlist
+document.getElementById('saveQueueBtn').onclick = async () => {
+    if (!state.queue.length) return;
+    const name = prompt('Nom de la nouvelle playlist :');
+    if (!name?.trim()) return;
+    try {
+        const pl = await portalApi('POST', '/portal/playlists', { name: name.trim() });
+        const ids = state.queue.map(s => s.id);
+        await portalApi('POST', `/portal/playlists/${pl.id}/tracks`, { song_ids: ids });
+        playerToast(`Playlist "${pl.name}" créée (${ids.length} titre(s)).`);
+        loadPlayerPlaylists();
+    } catch(e) { playerToast(e.message, false); }
+};
+
+document.getElementById('newPlaylistPlayerBtn').onclick = async () => {
+    const name = prompt('Nom de la nouvelle playlist :');
+    if (!name?.trim()) return;
+    try {
+        await portalApi('POST', '/portal/playlists', { name: name.trim() });
+        playerToast(`Playlist "${name}" créée.`);
+        loadPlayerPlaylists();
+    } catch(e) { playerToast(e.message, false); }
+};
+
+// Add current track to playlist
+document.getElementById('addToPlaylistBtn').onclick = () => {
+    const s = state.queue[state.currentIndex];
+    if (!s) return;
+    openPlaylistPicker(s.id, s.title);
+};
+
+function openPlaylistPicker(songId, songTitle) {
+    pickerTargetSongId = songId;
+    pickerTargetSongTitle = songTitle;
+    document.getElementById('pickerSongInfo').textContent = `"${songTitle}"`;
+    const list = document.getElementById('pickerList');
+    list.innerHTML = playerPlaylists.length
+        ? playerPlaylists.map(pl => `
+            <button onclick="addCurrentToPlaylist('${pl.id}', '${escapeHtml(pl.name)}')"
+                class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-xs truncate transition">
+                ♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>
+            </button>`).join('')
+        : '<div class="text-slate-500 text-xs py-2 text-center">Aucune playlist</div>';
+    document.getElementById('playlistPickerModal').style.display = 'flex';
+}
+
+async function addCurrentToPlaylist(playlistId, playlistName) {
+    document.getElementById('playlistPickerModal').style.display = 'none';
+    try {
+        await portalApi('POST', `/portal/playlists/${playlistId}/tracks`, { song_ids: [pickerTargetSongId] });
+        playerToast(`Ajouté à "${playlistName}".`);
+        loadPlayerPlaylists();
+    } catch(e) { playerToast(e.message, false); }
+}
+
+function openNewPlaylistFromPicker() {
+    document.getElementById('playlistPickerModal').style.display = 'none';
+    document.getElementById('newPlaylistName').value = '';
+    document.getElementById('newPlaylistSongId').dataset.songId = pickerTargetSongId || '';
+    document.getElementById('newPlaylistModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('newPlaylistName').focus(), 50);
+}
+function closeNewPlaylistModal() { document.getElementById('newPlaylistModal').style.display = 'none'; }
+document.getElementById('newPlaylistName').addEventListener('keydown', e => { if (e.key === 'Enter') createAndAddPlaylist(); });
+
+async function createAndAddPlaylist() {
+    const name = document.getElementById('newPlaylistName').value.trim();
+    const songId = document.getElementById('newPlaylistSongId').dataset.songId;
+    if (!name) return;
+    closeNewPlaylistModal();
+    try {
+        const pl = await portalApi('POST', '/portal/playlists', { name });
+        if (songId) await portalApi('POST', `/portal/playlists/${pl.id}/tracks`, { song_ids: [songId] });
+        playerToast(`Playlist "${name}" créée.`);
+        loadPlayerPlaylists();
+    } catch(e) { playerToast(e.message, false); }
+}
+
+// Show/hide addToPlaylist button and saveQueue button based on state
+const origPlayIndex = playIndex;
+function playIndex(i) {
+    origPlayIndex(i);
+    const hasTrack = i >= 0 && i < state.queue.length;
+    document.getElementById('addToPlaylistBtn').classList.toggle('hidden', !hasTrack);
+    document.getElementById('saveQueueBtn').classList.toggle('hidden', state.queue.length === 0);
+}
+
 // ─── Init ───
 loadArtists();
+loadPlayerPlaylists();
 </script>
 </body>
 </html>
