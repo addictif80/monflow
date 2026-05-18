@@ -117,6 +117,7 @@ let currentSongs = [];
 async function api(method, url, body = null) {
     const opts = {
         method,
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
     };
     if (body) opts.body = JSON.stringify(body);
