@@ -88,7 +88,10 @@
         </div>
     </div>
     <div class="flex items-center gap-2 w-56 justify-end">
-        <button id="addToPlaylistBtn" class="text-slate-400 hover:text-indigo-400 text-sm px-2 py-1 rounded hover:bg-slate-700 hidden" title="Ajouter à une playlist">♡</button>
+        <button id="addToPlaylistBtn" class="hidden flex items-center gap-1 text-sm px-2 py-1 rounded hover:bg-slate-700 transition" title="Ajouter à une playlist">
+            <span id="addToPlaylistHeart" class="text-slate-400">♡</span>
+            <span id="addToPlaylistLabel" class="text-xs text-slate-400 max-w-[100px] truncate hidden"></span>
+        </button>
         <button id="lyricsBtn" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-slate-700" title="Paroles">Aa</button>
         <span class="text-slate-400">🔊</span>
         <input id="volume" type="range" min="0" max="100" value="80" class="w-24 accent-indigo-500">
@@ -168,12 +171,13 @@
 </div>
 
 {{-- Portal overlay (iframe) — audio keeps playing --}}
-<div id="portalOverlay" class="hidden fixed inset-0 z-[200] flex flex-col" style="background:#0f172a">
-    <div class="flex items-center justify-between px-4 py-2 border-b border-slate-700 shrink-0">
-        <span class="text-sm font-semibold text-indigo-400">☰ Mon compte — MonFlow</span>
-        <button onclick="closePortalOverlay()" class="text-slate-400 hover:text-white text-xl leading-none px-2">✕</button>
-    </div>
-    <iframe id="portalFrame" src="" class="flex-1 w-full border-0" style="background:#0f172a"></iframe>
+<div id="portalOverlay" class="hidden fixed inset-0 z-[200]" style="background:#0f172a">
+    <iframe id="portalFrame" src="" class="w-full h-full border-0"></iframe>
+    {{-- Floating close button over the iframe --}}
+    <button onclick="closePortalOverlay()"
+        class="fixed top-3 right-4 z-[201] px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-indigo-400 hover:text-indigo-300 rounded-full text-xs shadow-lg transition">
+        ✕ Retour au lecteur
+    </button>
 </div>
 
 <script>
@@ -440,6 +444,7 @@ function playIndex(i) {
     if (lyricsVisible) loadLyrics();
     document.getElementById('addToPlaylistBtn').classList.remove('hidden');
     document.getElementById('saveQueueBtn').classList.remove('hidden');
+    updateAddToPlaylistBtn(s.id);
     saveStateToStorage();
 }
 
@@ -719,6 +724,8 @@ const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
 let playerPlaylists = [];
 let pickerTargetSongId = null;
 let pickerTargetSongTitle = null;
+// Map songId → playlistName for tracks already added in this session
+const songPlaylistMap = new Map();
 
 async function portalApi(method, url, body = null) {
     const token = document.querySelector('meta[name="csrf-token"]')?.content || CSRF;
@@ -961,10 +968,30 @@ function openPlaylistPicker(songId, songTitle) {
     document.getElementById('playlistPickerModal').style.display = 'flex';
 }
 
+function updateAddToPlaylistBtn(songId) {
+    const heart = document.getElementById('addToPlaylistHeart');
+    const label = document.getElementById('addToPlaylistLabel');
+    if (!heart) return;
+    const pl = songId ? songPlaylistMap.get(songId) : null;
+    if (pl) {
+        heart.textContent = '♥';
+        heart.className = 'text-indigo-400';
+        label.textContent = pl;
+        label.classList.remove('hidden');
+    } else {
+        heart.textContent = '♡';
+        heart.className = 'text-slate-400';
+        label.textContent = '';
+        label.classList.add('hidden');
+    }
+}
+
 async function addCurrentToPlaylist(playlistId, playlistName) {
     document.getElementById('playlistPickerModal').style.display = 'none';
     try {
         await portalApi('POST', `/portal/playlists/${playlistId}/tracks`, { song_ids: [pickerTargetSongId] });
+        songPlaylistMap.set(pickerTargetSongId, playlistName);
+        updateAddToPlaylistBtn(pickerTargetSongId);
         playerToast(`Ajouté à "${playlistName}".`);
         loadPlayerPlaylists();
     } catch(e) { playerToast(e.message, false); }
