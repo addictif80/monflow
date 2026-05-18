@@ -13,6 +13,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Derrière NPM → Tailscale → CyberPanel : faire confiance aux headers X-Forwarded-*
         $middleware->trustProxies(at: '*');
 
+        // Routes JSON (playlists) : déjà protégées par auth + CORS same-origin
+        // OLS/CyberPanel interfère avec la validation CSRF sur les requêtes fetch
+        $middleware->validateCsrfTokens(except: [
+            '/portal/playlists',
+            '/portal/playlists/*',
+        ]);
+
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
             'subscribed' => \App\Http\Middleware\SubscribedMiddleware::class,
