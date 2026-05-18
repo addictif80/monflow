@@ -696,12 +696,6 @@ function playerToast(msg, ok = true) {
 
 async function loadPlayerPlaylists() {
     try {
-        const data = await portalApi('GET', '/portal/playlists');
-        // Response is the view HTML when GET /portal/playlists returns a view — we need JSON
-        // Instead use a dedicated JSON endpoint via the existing show route with a special list call
-        // Actually loadPlayerPlaylists calls the full page; we'll parse JSON from the index action
-        // The index action returns a view, not JSON — so we do a workaround:
-        // fetch the playlists from Subsonic directly since we have ndCall available
         const resp = await ndCall('getPlaylists.view');
         const raw = resp.playlists?.playlist || [];
         playerPlaylists = Array.isArray(raw) ? raw : (raw.id ? [raw] : []);
