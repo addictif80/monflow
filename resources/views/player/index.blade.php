@@ -31,7 +31,14 @@
     <div class="text-sm text-slate-400">{{ Auth::user()->username }}</div>
 </header>
 
-<main class="flex-1 flex overflow-hidden">
+<main class="flex-1 flex overflow-hidden relative">
+    <div id="portalOverlay" class="hidden absolute inset-0 z-[200]" style="background:#0f172a">
+        <iframe id="portalFrame" src="" class="w-full h-full border-0"></iframe>
+        <button onclick="closePortalOverlay()"
+            class="absolute top-3 right-4 z-[201] px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-indigo-400 hover:text-indigo-300 rounded-full text-xs shadow-lg transition">
+            ✕ Retour au lecteur
+        </button>
+    </div>
     <aside class="w-48 card border-r p-3 shrink-0 flex flex-col gap-1 text-sm">
         <button data-view="artists" class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700">Artistes</button>
         <button data-view="albums" class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700">Albums récents</button>
@@ -170,14 +177,6 @@
     </div>
 </div>
 
-{{-- Portal overlay (iframe) — audio keeps playing --}}
-<div id="portalOverlay" class="hidden fixed inset-x-0 top-0 z-[200]" style="bottom:80px; background:#0f172a">
-    <iframe id="portalFrame" src="" class="w-full h-full border-0"></iframe>
-    <button onclick="closePortalOverlay()"
-        class="fixed top-3 right-4 z-[201] px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-indigo-400 hover:text-indigo-300 rounded-full text-xs shadow-lg transition">
-        ✕ Retour au lecteur
-    </button>
-</div>
 
 <script>
 const ND = {
