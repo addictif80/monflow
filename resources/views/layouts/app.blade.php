@@ -55,6 +55,103 @@
         @if($errors->any())<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded text-red-300">@foreach($errors->all() as $e)<div>{{ $e }}</div>@endforeach</div>@endif
         @yield('content')
     </main>
-    <footer class="bg-gray-800 border-t border-gray-700 py-4 text-center text-gray-500 text-sm">MonFlow &copy; {{ date('Y') }}</footer>
+    <footer class="bg-gray-800 border-t border-gray-700 py-4 text-center text-gray-500 text-sm" style="margin-bottom:64px">MonFlow &copy; {{ date('Y') }}</footer>
+</main-end>
+
+{{-- ─── Mini-player (persistent, reads localStorage state saved by /player) ─── --}}
+<div id="miniPlayer" class="fixed bottom-0 left-0 right-0 h-16 bg-gray-900 border-t border-gray-700 z-50 hidden items-center px-4 gap-3">
+    <img id="mpCover" src="" alt="" class="w-10 h-10 rounded object-cover flex-shrink-0 bg-gray-700" onerror="this.src=''">
+    <div class="flex-1 min-w-0">
+        <div id="mpTitle" class="text-sm font-medium truncate text-gray-100">—</div>
+        <div id="mpArtist" class="text-xs text-gray-400 truncate">—</div>
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+        <button id="mpPrev" class="text-gray-400 hover:text-white transition text-lg">⏮</button>
+        <button id="mpPlayPause" class="w-9 h-9 bg-indigo-600 hover:bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm transition">▶</button>
+        <button id="mpNext" class="text-gray-400 hover:text-white transition text-lg">⏭</button>
+    </div>
+    <input id="mpSeek" type="range" min="0" max="100" value="0" class="w-28 accent-indigo-500 flex-shrink-0">
+    <a href="/player" class="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0 ml-1 whitespace-nowrap">⤢ Lecteur</a>
+    <audio id="mpAudio" style="display:none"></audio>
+</div>
+
+<script>
+(function() {
+    const mp = document.getElementById('miniPlayer');
+    const mpAudio = document.getElementById('mpAudio');
+
+    function ndStreamUrl(nd, id) {
+        return `${nd.url}/rest/stream.view?u=${encodeURIComponent(nd.user)}&t=${nd.token}&s=${nd.salt}&v=${nd.version}&c=${nd.client}&id=${id}`;
+    }
+    function ndCoverUrl(nd, id) {
+        return `${nd.url}/rest/getCoverArt.view?u=${encodeURIComponent(nd.user)}&t=${nd.token}&s=${nd.salt}&v=${nd.version}&c=${nd.client}&id=${id}&size=50`;
+    }
+
+    let nd, queue = [], qidx = 0;
+
+    try {
+        nd    = JSON.parse(localStorage.getItem('mf_nd') || 'null');
+        queue = JSON.parse(localStorage.getItem('mf_queue') || '[]');
+        qidx  = parseInt(localStorage.getItem('mf_qidx') || '0', 10);
+    } catch(e) {}
+
+    if (!nd || !queue.length) return;
+
+    // Show mini-player
+    mp.classList.remove('hidden');
+    mp.classList.add('flex');
+    document.body.style.paddingBottom = '64px';
+
+    const now = queue[qidx];
+    if (!now) return;
+
+    function loadTrack(idx, resume) {
+        const s = queue[idx];
+        if (!s) return;
+        qidx = idx;
+        localStorage.setItem('mf_qidx', String(idx));
+        document.getElementById('mpTitle').textContent  = s.title || '—';
+        document.getElementById('mpArtist').textContent = s.artist || s.album || '';
+        const cover = document.getElementById('mpCover');
+        cover.src = ndCoverUrl(nd, s.coverArt || s.id);
+        mpAudio.src = ndStreamUrl(nd, s.id);
+        if (resume) {
+            mpAudio.play().catch(() => {});
+            document.getElementById('mpPlayPause').textContent = '⏸';
+        }
+    }
+
+    // Try to resume from saved position
+    const savedNow = JSON.parse(localStorage.getItem('mf_now') || 'null');
+    loadTrack(qidx, false);
+    if (savedNow && savedNow.playing && (Date.now() - (savedNow.ts || 0)) < 300000) {
+        mpAudio.addEventListener('canplay', function seek() {
+            mpAudio.currentTime = savedNow.time || 0;
+            mpAudio.play().catch(() => {});
+            document.getElementById('mpPlayPause').textContent = '⏸';
+            mpAudio.removeEventListener('canplay', seek);
+        }, { once: true });
+        mpAudio.load();
+    }
+
+    // Controls
+    document.getElementById('mpPlayPause').addEventListener('click', () => {
+        if (mpAudio.paused) { mpAudio.play(); document.getElementById('mpPlayPause').textContent = '⏸'; }
+        else { mpAudio.pause(); document.getElementById('mpPlayPause').textContent = '▶'; }
+    });
+    document.getElementById('mpPrev').addEventListener('click', () => loadTrack(Math.max(0, qidx - 1), true));
+    document.getElementById('mpNext').addEventListener('click', () => loadTrack(Math.min(queue.length - 1, qidx + 1), true));
+    mpAudio.addEventListener('ended', () => loadTrack(qidx + 1, true));
+
+    // Progress bar
+    const seek = document.getElementById('mpSeek');
+    mpAudio.addEventListener('timeupdate', () => {
+        if (mpAudio.duration) seek.value = (mpAudio.currentTime / mpAudio.duration) * 100;
+    });
+    seek.addEventListener('input', () => {
+        if (mpAudio.duration) mpAudio.currentTime = (seek.value / 100) * mpAudio.duration;
+    });
+})();
+</script>
 </body>
 </html>

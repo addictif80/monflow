@@ -21,7 +21,7 @@
 
 <header class="card border-b flex items-center justify-between px-4 h-14 shrink-0">
     <div class="flex items-center gap-4">
-        <a href="/portal" class="text-indigo-400 hover:text-indigo-300 text-sm">&larr; Portail</a>
+        <button onclick="openPortalOverlay()" class="text-indigo-400 hover:text-indigo-300 text-sm">☰ Mon compte</button>
         <h1 class="text-lg font-bold text-indigo-400">🎵 MonFlow Lecteur</h1>
     </div>
     <div class="flex items-center gap-2">
@@ -165,6 +165,15 @@
             <button onclick="createAndAddPlaylist()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">Créer</button>
         </div>
     </div>
+</div>
+
+{{-- Portal overlay (iframe) — audio keeps playing --}}
+<div id="portalOverlay" class="hidden fixed inset-0 z-[200] flex flex-col" style="background:#0f172a">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-slate-700 shrink-0">
+        <span class="text-sm font-semibold text-indigo-400">☰ Mon compte — MonFlow</span>
+        <button onclick="closePortalOverlay()" class="text-slate-400 hover:text-white text-xl leading-none px-2">✕</button>
+    </div>
+    <iframe id="portalFrame" src="" class="flex-1 w-full border-0" style="background:#0f172a"></iframe>
 </div>
 
 <script>
@@ -431,6 +440,7 @@ function playIndex(i) {
     if (lyricsVisible) loadLyrics();
     document.getElementById('addToPlaylistBtn').classList.remove('hidden');
     document.getElementById('saveQueueBtn').classList.remove('hidden');
+    saveStateToStorage();
 }
 
 function renderQueue() {
@@ -1016,6 +1026,60 @@ async function createAndAddPlaylist() {
         loadPlayerPlaylists();
     } catch(e) { playerToast(e.message, false); }
 }
+
+// ─── Portal overlay ───
+function openPortalOverlay(url = '/portal') {
+    const frame = document.getElementById('portalFrame');
+    if (!frame.src || !frame.src.endsWith(url)) frame.src = url;
+    document.getElementById('portalOverlay').classList.remove('hidden');
+}
+function closePortalOverlay() {
+    document.getElementById('portalOverlay').classList.add('hidden');
+}
+
+// ─── Persist state to localStorage (for mini-player in portal) ───
+function saveStateToStorage() {
+    const s = state.queue[state.currentIndex];
+    if (!s) return;
+    try {
+        localStorage.setItem('mf_nd', JSON.stringify({
+            url: ND.url, user: ND.user, salt: ND.salt, token: ND.token,
+            version: ND.version, client: ND.client, format: ND.format,
+        }));
+        localStorage.setItem('mf_now', JSON.stringify({
+            id: s.id, title: s.title || '—',
+            artist: s.artist || '', album: s.album || '',
+            coverArt: s.coverArt || s.id,
+            duration: s.duration || 0,
+            time: audio.currentTime,
+            playing: !audio.paused,
+            ts: Date.now(),
+        }));
+        localStorage.setItem('mf_queue', JSON.stringify(state.queue));
+        localStorage.setItem('mf_qidx', String(state.currentIndex));
+    } catch(e) {}
+}
+// Save on track start and every 5 s
+const _origPlayIndex = playIndex;
+// Save periodically
+setInterval(saveStateToStorage, 5000);
+// Save on pause/play toggle
+audio.addEventListener('pause', saveStateToStorage);
+audio.addEventListener('play',  saveStateToStorage);
+
+// ─── URL param: ?play_id={navidrome_song_id} ───
+(async function handleUrlParams() {
+    const params = new URLSearchParams(location.search);
+    const playId = params.get('play_id');
+    if (!playId) return;
+    try {
+        const resp = await ndCall('getSong.view', { id: playId });
+        const s = resp.song;
+        if (s) { state.queue = [s]; playIndex(0); }
+    } catch(e) {}
+    // Clean URL without reloading
+    history.replaceState({}, '', '/player');
+})();
 
 // ─── Init ───
 loadArtists();
