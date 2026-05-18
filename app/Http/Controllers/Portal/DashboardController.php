@@ -394,7 +394,10 @@ class DashboardController extends Controller
         $user = Auth::user();
         $file = $request->file('avatar');
         $filename = $user->id . '.' . $file->getClientOriginalExtension();
-        $file->storeAs('public/avatars', $filename);
+
+        $dir = public_path('avatars');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $file->move($dir, $filename);
 
         $user->avatar_path = 'avatars/' . $filename;
         $user->save();

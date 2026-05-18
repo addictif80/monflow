@@ -12,7 +12,7 @@
     {{-- Header --}}
     <div class="flex items-center gap-6 mb-10">
         @if($user->avatar_path)
-            <img src="{{ asset('storage/' . $user->avatar_path) }}" alt="Avatar"
+            <img src="{{ asset($user->avatar_path) }}" alt="Avatar"
                  class="w-24 h-24 rounded-full object-cover ring-4 ring-indigo-500/40">
         @else
             <div class="w-24 h-24 rounded-full bg-indigo-700 flex items-center justify-center text-4xl font-bold text-white ring-4 ring-indigo-500/40">

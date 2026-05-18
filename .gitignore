@@ -49,3 +49,4 @@ Thumbs.db
 /bootstrap/cache/
 /storage/*.key
 composer.lock
+public/storage
