@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Payment, Subscription, Wallet, WalletTransaction, UserDevice, Plan, PromoCode, Notification};
-use App\Services\{NavidromeService, StripeService};
+use App\Models\{Payment, Subscription, Wallet, WalletTransaction, UserDevice, Plan, PromoCode, Notification, Ticket, Feedback};
+use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Hash, Log, DB};
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardController extends Controller
 {
@@ -263,7 +264,7 @@ class DashboardController extends Controller
         DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
             $wallet = Wallet::lockForUpdate()->find($wallet->id);
             $wallet->decrement('balance', $total);
-            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'subscription', 'amount' => -$total, 'description' => $description]);
+            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'payment', 'amount' => -$total, 'description' => $description]);
 
             $days = $plan->period_days * $months;
             $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
@@ -309,5 +310,116 @@ class DashboardController extends Controller
     {
         $payment = Payment::where('user_id', Auth::id())->findOrFail($id);
         return view('portal.invoice', ['payment' => $payment, 'user' => Auth::user()]);
+    }
+
+    public function cancelSubscriptionConfirm()
+    {
+        $sub = Auth::user()->activeSubscription?->load('plan');
+        if (!$sub) return redirect('/portal')->with('error', 'Aucun abonnement actif.');
+        return view('portal.cancel-subscription', ['sub' => $sub]);
+    }
+
+    public function exportData(Request $request)
+    {
+        $user = Auth::user();
+
+        $wallet = $user->wallet;
+        $transactions = $wallet
+            ? WalletTransaction::where('wallet_id', $wallet->id)->orderBy('created_at')->get(['type', 'amount', 'description', 'created_at'])
+            : collect();
+
+        $tickets = Ticket::where('user_id', $user->id)->with(['messages' => fn($q) => $q->select('ticket_id', 'body', 'is_staff_reply', 'created_at')])->get(['id', 'subject', 'status', 'created_at']);
+
+        $data = [
+            'export_date' => now()->toIso8601String(),
+            'profil' => [
+                'username'   => $user->username,
+                'email'      => $user->email,
+                'prenom'     => $user->first_name,
+                'nom'        => $user->last_name,
+                'telephone'  => $user->phone,
+                'newsletter' => $user->newsletter_optin,
+                'statut'     => $user->status,
+                'inscription'=> $user->created_at?->toIso8601String(),
+            ],
+            'abonnements' => Subscription::where('user_id', $user->id)->with('plan:id,name,price,billing_cycle')->get(['plan_id', 'status', 'current_period_start', 'current_period_end', 'cancelled_at', 'created_at']),
+            'paiements' => Payment::where('user_id', $user->id)->get(['amount', 'status', 'payment_method', 'description', 'created_at']),
+            'portefeuille' => [
+                'solde' => $wallet?->balance ?? 0,
+                'transactions' => $transactions,
+            ],
+            'tickets_support' => $tickets,
+            'feedbacks' => Feedback::where('user_id', $user->id)->get(['type', 'subject', 'body', 'status', 'created_at']),
+            'appareils' => UserDevice::where('user_id', $user->id)->get(['device_name', 'ip_address', 'last_seen_at', 'is_active', 'created_at']),
+        ];
+
+        $filename = 'monflow-export-' . now()->format('Y-m-d') . '.json';
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        return response($json, 200, [
+            'Content-Type'        => 'application/json',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    public function deleteAccount(Request $request, NavidromeService $nd, StripeService $stripe, EmailService $mail)
+    {
+        $user = Auth::user();
+
+        if ($request->isMethod('get')) {
+            return view('portal.delete-account');
+        }
+
+        $request->validate([
+            'password' => 'required',
+            'confirm'  => 'required|in:SUPPRIMER',
+        ], [
+            'confirm.in' => 'Tapez exactement SUPPRIMER pour confirmer.',
+        ]);
+
+        if (!Hash::check($request->password, $user->password)) {
+            return back()->withErrors(['password' => 'Mot de passe incorrect.']);
+        }
+
+        // Annuler les abonnements Stripe actifs
+        foreach (Subscription::where('user_id', $user->id)->whereNotNull('stripe_subscription_id')->where('stripe_subscription_id', '!=', '')->get() as $sub) {
+            try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
+        }
+
+        // Supprimer le compte Navidrome
+        if ($user->navidrome_id) {
+            try { $nd->deleteUser($user->navidrome_id); } catch (\Exception $e) {
+                Log::error("Navidrome delete failed for user {$user->id}: {$e->getMessage()}");
+            }
+        }
+
+        // Envoyer l'email de confirmation avant d'anonymiser
+        try { $mail->sendDeleted($user); } catch (\Exception $e) {}
+
+        // Déconnexion immédiate
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        // Anonymiser les données personnelles (les paiements sont conservés pour obligation légale)
+        DB::transaction(function () use ($user) {
+            $ts = now()->timestamp;
+            $user->update([
+                'status'             => 'deleted',
+                'email'              => "deleted_{$ts}_{$user->id}@deleted.invalid",
+                'first_name'         => null,
+                'last_name'          => null,
+                'phone'              => null,
+                'newsletter_optin'   => false,
+                'navidrome_id'       => null,
+                'encrypted_password' => null,
+            ]);
+
+            Subscription::where('user_id', $user->id)->whereNotIn('status', ['cancelled', 'expired'])->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+            UserDevice::where('user_id', $user->id)->delete();
+            Notification::where('user_id', $user->id)->delete();
+        });
+
+        return redirect('/login')->with('success', 'Votre compte a été supprimé. Vos données personnelles ont été effacées.');
     }
 }

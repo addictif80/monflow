@@ -35,12 +35,10 @@
                     <span>{{ \Carbon\Carbon::parse($activeSub->current_period_end)->format('d/m/Y') }}</span>
                 </div>
                 <div class="pt-3 border-t border-gray-700">
-                    <form action="/portal/cancel-subscription" method="POST" onsubmit="return confirm('Êtes-vous sûr de vouloir annuler votre abonnement ?')">
-                        @csrf
-                        <button type="submit" class="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition">
-                            Annuler l'abonnement
-                        </button>
-                    </form>
+                    <a href="/portal/cancel-subscription"
+                       class="block w-full text-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition">
+                        Résilier l'abonnement
+                    </a>
                 </div>
             </div>
         @elseif($pendingSub)

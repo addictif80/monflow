@@ -62,4 +62,30 @@
         </div>
     </form>
 </div>
+
+<div class="max-w-2xl mt-8 space-y-3">
+    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wider">Données &amp; compte</h2>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-gray-200">Exporter mes données</p>
+            <p class="text-xs text-gray-500 mt-0.5">Télécharger un fichier JSON de toutes vos données personnelles (RGPD).</p>
+        </div>
+        <a href="/portal/export-data"
+           class="flex-shrink-0 ml-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">
+            Télécharger
+        </a>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-red-900/50 p-4 flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-red-400">Supprimer mon compte</p>
+            <p class="text-xs text-gray-500 mt-0.5">Supprime définitivement vos données personnelles et votre accès.</p>
+        </div>
+        <a href="/portal/delete-account"
+           class="flex-shrink-0 ml-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition">
+            Supprimer
+        </a>
+    </div>
+</div>
 @endsection
