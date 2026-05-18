@@ -106,6 +106,26 @@
 <audio id="audio"></audio>
 
 {{-- Playlist modals --}}
+<div id="shareModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
+    <div class="bg-slate-800 border border-slate-600 rounded-xl p-5 w-80 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-sm">Partager la playlist</h3>
+            <button onclick="document.getElementById('shareModal').style.display='none'" class="text-slate-400 hover:text-white">&times;</button>
+        </div>
+        <div id="sharePlaylistName" class="text-xs text-slate-400 mb-3 truncate"></div>
+        <input type="hidden" id="sharePlaylistId">
+        <div class="relative mb-3">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">#</span>
+            <input id="shareTargetInput" type="text" placeholder="pseudo du destinataire"
+                class="w-full pl-7 pr-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div class="flex gap-2">
+            <button onclick="document.getElementById('shareModal').style.display='none'" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs transition">Annuler</button>
+            <button onclick="confirmSharePlaylist()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">Partager</button>
+        </div>
+    </div>
+</div>
+
 <div id="playlistPickerModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
     <div class="bg-slate-800 border border-slate-600 rounded-xl p-5 w-80 shadow-xl">
         <div class="flex items-center justify-between mb-3">
@@ -805,9 +825,11 @@ async function loadPlaylistInPlayer(id, name) {
         header.className = 'mb-4 flex gap-2';
         header.innerHTML = `
             <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium">▶ Tout lire</button>
-            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">+ File d'attente</button>`;
+            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">+ File d'attente</button>
+            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm ml-auto">⤴ Partager</button>`;
         header.children[0].onclick = () => { state.queue = [...songs]; playIndex(0); };
         header.children[1].onclick = () => { state.queue.push(...songs); renderQueue(); };
+        header.children[2].onclick = () => openShareModal(id, name);
         container.appendChild(header);
         songs.forEach((s, i) => {
             const el = document.createElement('div');
@@ -909,6 +931,26 @@ function openNewPlaylistFromPicker() {
     document.getElementById('newPlaylistModal').style.display = 'flex';
     setTimeout(() => document.getElementById('newPlaylistName').focus(), 50);
 }
+function openShareModal(playlistId, playlistName) {
+    document.getElementById('sharePlaylistId').value = playlistId;
+    document.getElementById('sharePlaylistName').textContent = `"${playlistName}"`;
+    document.getElementById('shareTargetInput').value = '';
+    document.getElementById('shareModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('shareTargetInput').focus(), 50);
+}
+
+async function confirmSharePlaylist() {
+    const playlistId = document.getElementById('sharePlaylistId').value;
+    const target = document.getElementById('shareTargetInput').value.trim();
+    if (!target) return;
+    document.getElementById('shareModal').style.display = 'none';
+    try {
+        const res = await portalApi('POST', `/portal/playlists/${playlistId}/share`, { target });
+        playerToast(res.message || 'Playlist partagée.');
+    } catch(e) { playerToast(e.message, false); }
+}
+document.getElementById('shareTargetInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmSharePlaylist(); });
+
 function closeNewPlaylistModal() { document.getElementById('newPlaylistModal').style.display = 'none'; }
 document.getElementById('newPlaylistName').addEventListener('keydown', e => { if (e.key === 'Enter') createAndAddPlaylist(); });
 

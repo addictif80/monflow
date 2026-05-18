@@ -64,6 +64,73 @@
 </div>
 
 <div class="max-w-2xl mt-8 space-y-3">
+    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wider">Profil public</h2>
+
+    {{-- Avatar --}}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-5">
+        <div class="flex items-center gap-5 mb-4">
+            @if(Auth::user()->avatar_path)
+                <img src="{{ asset('storage/' . Auth::user()->avatar_path) }}" alt="Avatar"
+                     class="w-16 h-16 rounded-full object-cover ring-2 ring-indigo-500/40">
+            @else
+                <div class="w-16 h-16 rounded-full bg-indigo-700 flex items-center justify-center text-2xl font-bold text-white">
+                    {{ strtoupper(substr(Auth::user()->display_name ?: Auth::user()->username, 0, 1)) }}
+                </div>
+            @endif
+            <div>
+                @if(Auth::user()->display_name)
+                    <div class="font-semibold text-white">{{ Auth::user()->display_name }}</div>
+                    <div class="text-indigo-400 font-mono text-sm">#{{ Auth::user()->display_name }}</div>
+                    <a href="/u/{{ Auth::user()->display_name }}" target="_blank"
+                       class="text-xs text-gray-400 hover:text-indigo-400 mt-0.5 inline-block">Voir mon profil public →</a>
+                @else
+                    <div class="text-gray-400 text-sm">Aucun pseudo défini</div>
+                @endif
+            </div>
+        </div>
+        <form action="/portal/profile/avatar" method="POST" enctype="multipart/form-data" class="flex items-center gap-3">
+            @csrf
+            <input type="file" name="avatar" accept="image/*"
+                   class="text-sm text-gray-300 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-200 hover:file:bg-gray-600">
+            <button type="submit" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition flex-shrink-0">
+                Mettre à jour
+            </button>
+        </form>
+    </div>
+
+    {{-- Display name --}}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-5">
+        <h3 class="text-sm font-medium text-gray-300 mb-1">Pseudo public</h3>
+        <p class="text-xs text-gray-500 mb-3">Votre identifiant public. Lettres, chiffres, <code class="text-gray-400">_</code> <code class="text-gray-400">-</code> <code class="text-gray-400">.</code> uniquement. Unique sur MonFlow.</p>
+        @if(session('display_name_suggestions'))
+        <div class="mb-3 p-3 bg-amber-900/30 border border-amber-700/50 rounded text-xs text-amber-300">
+            Ce pseudo est déjà pris. Suggestions :
+            <div class="flex flex-wrap gap-2 mt-2">
+                @foreach(session('display_name_suggestions') as $s)
+                    <button type="button" onclick="document.getElementById('display_name_input').value='{{ $s }}'"
+                            class="px-2 py-0.5 bg-gray-700 hover:bg-indigo-700 rounded font-mono transition">{{ $s }}</button>
+                @endforeach
+            </div>
+        </div>
+        @endif
+        <form action="/portal/profile/display-name" method="POST" class="flex items-center gap-3">
+            @csrf
+            <div class="relative flex-1">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">#</span>
+                <input type="text" name="display_name" id="display_name_input"
+                       value="{{ old('display_name', Auth::user()->display_name) }}"
+                       placeholder="monpseudo" maxlength="50"
+                       class="w-full pl-7 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition flex-shrink-0">
+                Enregistrer
+            </button>
+        </form>
+        @error('display_name')<p class="text-red-400 text-xs mt-2">{{ $message }}</p>@enderror
+    </div>
+</div>
+
+<div class="max-w-2xl mt-8 space-y-3">
     <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wider">Données &amp; compte</h2>
 
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 flex items-center justify-between">

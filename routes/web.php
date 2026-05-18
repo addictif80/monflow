@@ -10,6 +10,9 @@ use App\Http\Controllers\Portal\DeemixProxyController;
 use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Route;
 
+// ─── Public profiles ───
+Route::get('/u/{displayName}', [\App\Http\Controllers\PublicProfileController::class, 'show'])->name('public.profile');
+
 // ─── Public ───
 Route::get('/', function () {
     if (\Illuminate\Support\Facades\Auth::check()) {
@@ -43,6 +46,8 @@ Route::post('/stripe/webhook', [PaymentController::class, 'stripeWebhook'])->nam
 Route::middleware('auth')->group(function () {
     Route::get('/portal', [DashboardController::class, 'index'])->name('portal');
     Route::match(['get', 'post'], '/portal/profile', [DashboardController::class, 'profile']);
+    Route::post('/portal/profile/display-name', [DashboardController::class, 'updateDisplayName']);
+    Route::post('/portal/profile/avatar', [DashboardController::class, 'updateAvatar']);
     Route::match(['get', 'post'], '/portal/change-password', [DashboardController::class, 'changePassword']);
     Route::get('/portal/plans', [DashboardController::class, 'plans']);
     Route::get('/portal/subscribe/{plan}', [DashboardController::class, 'subscribe']);
@@ -96,6 +101,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/portal/playlists/{id}', [PlaylistController::class, 'destroy']);
     Route::post('/portal/playlists/{id}/tracks', [PlaylistController::class, 'addTracks']);
     Route::delete('/portal/playlists/{id}/tracks', [PlaylistController::class, 'removeTrack']);
+    Route::post('/portal/playlists/{id}/share', [PlaylistController::class, 'share']);
 
     // GDPR data export
     Route::get('/portal/export-data', [DashboardController::class, 'exportData']);

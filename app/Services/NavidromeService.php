@@ -488,4 +488,70 @@ class NavidromeService
         ]);
         return $data['searchResult3']['song'] ?? [];
     }
+
+    private function userJwt(string $username, string $password): string
+    {
+        $resp = Http::timeout(10)->post("{$this->baseUrl}/auth/login", [
+            'username' => $username,
+            'password' => $password,
+        ]);
+        $resp->throw();
+        $token = $resp->json('token');
+        if (!$token) throw new \RuntimeException('Authentification Navidrome échouée.');
+        return $token;
+    }
+
+    public function getUserTopSongs(string $username, string $password, int $limit = 3): array
+    {
+        try {
+            $jwt = $this->userJwt($username, $password);
+            $resp = Http::timeout(15)
+                ->withHeaders(['x-nd-authorization' => "Bearer {$jwt}"])
+                ->get("{$this->baseUrl}/api/song", [
+                    '_sort' => 'playCount', '_order' => 'DESC',
+                    '_start' => 0, '_end' => $limit,
+                ]);
+            return $resp->ok() ? ($resp->json() ?? []) : [];
+        } catch (\Exception) {
+            return [];
+        }
+    }
+
+    public function getUserListeningStats(string $username, string $password): array
+    {
+        try {
+            $jwt = $this->userJwt($username, $password);
+            $resp = Http::timeout(30)
+                ->withHeaders(['x-nd-authorization' => "Bearer {$jwt}"])
+                ->get("{$this->baseUrl}/api/song", [
+                    '_sort' => 'playCount', '_order' => 'DESC',
+                    '_start' => 0, '_end' => 2000,
+                ]);
+            if (!$resp->ok()) return ['totalSeconds' => 0];
+            $songs = $resp->json() ?? [];
+            $totalSeconds = 0;
+            foreach ($songs as $s) {
+                $pc = (int)($s['playCount'] ?? 0);
+                if ($pc === 0) break;
+                $totalSeconds += $pc * (int)($s['duration'] ?? 0);
+            }
+            return ['totalSeconds' => $totalSeconds];
+        } catch (\Exception) {
+            return ['totalSeconds' => 0];
+        }
+    }
+
+    public function copyPlaylistToUser(
+        string $fromUser, string $fromPass,
+        string $toUser, string $toPass,
+        string $playlistId, string $playlistName
+    ): void {
+        $source = $this->getPlaylist($fromUser, $fromPass, $playlistId);
+        $songIds = array_column($source['entry'] ?? [], 'id');
+        $new = $this->createPlaylist($toUser, $toPass, $playlistName);
+        $newId = $new['id'] ?? null;
+        if ($newId && !empty($songIds)) {
+            $this->addSongsToPlaylist($toUser, $toPass, $newId, $songIds);
+        }
+    }
 }
