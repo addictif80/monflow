@@ -115,12 +115,15 @@ let currentSongs = [];
 
 // ─── API helpers ───
 async function api(method, url, body = null) {
+    // Relit le token à chaque appel pour gérer les régénérations de session
+    const token = document.querySelector('meta[name="csrf-token"]').content;
+    const payload = method !== 'GET' ? { ...(body || {}), _token: token } : null;
     const opts = {
         method,
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
     };
-    if (body) opts.body = JSON.stringify(body);
+    if (payload) opts.body = JSON.stringify(payload);
     const r = await fetch(url, opts);
     if (!r.ok) {
         const err = await r.json().catch(() => ({}));
