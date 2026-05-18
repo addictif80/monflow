@@ -123,46 +123,133 @@
     </section>
 </main>
 
-<footer class="card border-t shrink-0 px-3 sm:px-4 py-2 sm:py-0 sm:h-20 flex flex-col sm:flex-row items-center gap-1 sm:gap-4" style="padding-bottom: env(safe-area-inset-bottom, 0)">
-    {{-- Track info --}}
-    <div class="flex items-center gap-3 w-full sm:min-w-0 sm:w-80">
-        <div id="coverArt" class="w-10 h-10 sm:w-12 sm:h-12 bg-slate-900 rounded flex items-center justify-center text-2xl flex-shrink-0">🎵</div>
-        <div class="min-w-0 flex-1">
-            <div id="trackTitle" class="text-sm font-medium truncate">Aucune piste</div>
-            <div id="trackArtist" class="text-xs text-slate-400 truncate">—</div>
+<footer class="card border-t shrink-0" style="padding-bottom:env(safe-area-inset-bottom,0)">
+    {{-- Mobile : mini-player compact cliquable --}}
+    <div id="mobileBar" class="sm:hidden flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none active:bg-slate-700/30 transition">
+        <div id="mbCoverArt" class="w-11 h-11 bg-slate-800 rounded-lg flex items-center justify-center text-2xl flex-shrink-0">🎵</div>
+        <div class="flex-1 min-w-0">
+            <div id="mbTitle" class="text-sm font-medium truncate">Aucune piste</div>
+            <div id="mbArtist" class="text-xs text-slate-400 truncate">—</div>
         </div>
-        {{-- Mobile-only: heart + controls inline --}}
-        <div class="flex items-center gap-2 sm:hidden flex-shrink-0">
-            <button id="addToPlaylistBtnMobile" class="hidden text-slate-400 text-lg" title="Ajouter à une playlist">♡</button>
-            <button id="prevBtnMobile" class="text-slate-400 text-xl">⏮</button>
-            <button id="playBtnMobile" class="w-9 h-9 bg-white text-slate-900 rounded-full text-lg flex items-center justify-center">▶</button>
-            <button id="nextBtnMobile" class="text-slate-400 text-xl">⏭</button>
-        </div>
+        <button id="mbPlay" class="w-10 h-10 bg-white text-slate-900 rounded-full flex items-center justify-center text-lg flex-shrink-0 active:scale-90 transition-transform">▶</button>
+        <button id="mbNext" class="text-slate-400 text-xl flex-shrink-0 px-1 active:text-white">⏭</button>
     </div>
-    {{-- Progress + desktop controls --}}
-    <div class="flex-1 flex flex-col items-center gap-1 w-full">
-        <div class="hidden sm:flex items-center gap-3">
-            <button id="prevBtn" class="text-slate-400 hover:text-white text-xl" title="Précédent">⏮</button>
-            <button id="playBtn" class="w-10 h-10 bg-white text-slate-900 rounded-full text-xl flex items-center justify-center hover:scale-105 transition">▶</button>
-            <button id="nextBtn" class="text-slate-400 hover:text-white text-xl" title="Suivant">⏭</button>
+    {{-- Desktop : controls complets --}}
+    <div class="hidden sm:flex items-center h-20 px-4 gap-4">
+        <div class="flex items-center gap-3 min-w-0 w-80">
+            <div id="coverArt" class="w-12 h-12 bg-slate-900 rounded flex items-center justify-center text-2xl flex-shrink-0">🎵</div>
+            <div class="min-w-0">
+                <div id="trackTitle" class="text-sm font-medium truncate">Aucune piste</div>
+                <div id="trackArtist" class="text-xs text-slate-400 truncate">—</div>
+            </div>
         </div>
-        <div class="flex items-center gap-2 w-full max-w-xl">
-            <span id="curTime" class="text-xs text-slate-400 w-10 text-right">0:00</span>
-            <input id="progress" type="range" min="0" max="100" value="0" class="flex-1 accent-indigo-500">
-            <span id="totTime" class="text-xs text-slate-400 w-10">0:00</span>
+        <div class="flex-1 flex flex-col items-center gap-1">
+            <div class="flex items-center gap-3">
+                <button id="prevBtn" class="text-slate-400 hover:text-white text-xl" title="Précédent">⏮</button>
+                <button id="playBtn" class="w-10 h-10 bg-white text-slate-900 rounded-full text-xl flex items-center justify-center hover:scale-105 transition">▶</button>
+                <button id="nextBtn" class="text-slate-400 hover:text-white text-xl" title="Suivant">⏭</button>
+            </div>
+            <div class="flex items-center gap-2 w-full max-w-xl">
+                <span id="curTime" class="text-xs text-slate-400 w-10 text-right">0:00</span>
+                <input id="progress" type="range" min="0" max="100" value="0" class="flex-1 accent-indigo-500">
+                <span id="totTime" class="text-xs text-slate-400 w-10">0:00</span>
+            </div>
         </div>
-    </div>
-    {{-- Desktop: heart + volume --}}
-    <div class="hidden sm:flex items-center gap-2 w-56 justify-end">
-        <button id="addToPlaylistBtn" class="hidden flex items-center gap-1 text-sm px-2 py-1 rounded hover:bg-slate-700 transition" title="Ajouter à une playlist">
-            <span id="addToPlaylistHeart" class="text-slate-400">♡</span>
-            <span id="addToPlaylistLabel" class="text-xs text-slate-400 max-w-[100px] truncate hidden"></span>
-        </button>
-        <button id="lyricsBtn" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-slate-700" title="Paroles">Aa</button>
-        <span class="text-slate-400">🔊</span>
-        <input id="volume" type="range" min="0" max="100" value="80" class="w-24 accent-indigo-500">
+        <div class="hidden sm:flex items-center gap-2 w-56 justify-end">
+            <button id="addToPlaylistBtn" class="hidden flex items-center gap-1 text-sm px-2 py-1 rounded hover:bg-slate-700 transition" title="Ajouter à une playlist">
+                <span id="addToPlaylistHeart" class="text-slate-400">♡</span>
+                <span id="addToPlaylistLabel" class="text-xs text-slate-400 max-w-[100px] truncate hidden"></span>
+            </button>
+            <button id="lyricsBtn" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-slate-700" title="Paroles">Aa</button>
+            <span class="text-slate-400">🔊</span>
+            <input id="volume" type="range" min="0" max="100" value="80" class="w-24 accent-indigo-500">
+        </div>
     </div>
 </footer>
+
+{{-- ─── Now Playing Screen (mobile plein écran) ─── --}}
+<div id="nowPlayingScreen" class="sm:hidden fixed inset-0 z-[500] flex flex-col"
+     style="background:#0f172a;transform:translateY(100%);transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,16px)">
+
+    {{-- Barre supérieure --}}
+    <div id="npTopBar" class="flex items-center justify-between px-4 py-3 flex-shrink-0">
+        <button id="npClose" class="w-11 h-11 flex items-center justify-center text-slate-400 rounded-full active:bg-slate-700">
+            <svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="text-xs text-slate-400 font-semibold uppercase tracking-widest">En lecture</span>
+        <button id="npOptions" class="w-11 h-11 flex items-center justify-center text-slate-400 rounded-full active:bg-slate-700 text-2xl font-bold leading-none">⋯</button>
+    </div>
+
+    {{-- Pochette --}}
+    <div class="flex-1 flex items-center justify-center px-10 py-2 min-h-0">
+        <div class="w-full aspect-square rounded-2xl overflow-hidden bg-slate-800 shadow-2xl shadow-black/60">
+            <div id="npCoverArt" class="w-full h-full flex items-center justify-center text-7xl">🎵</div>
+        </div>
+    </div>
+
+    {{-- Infos + contrôles --}}
+    <div class="px-8 flex-shrink-0">
+        {{-- Titre + cœur --}}
+        <div class="flex items-start justify-between gap-4 mb-4">
+            <div class="min-w-0 flex-1">
+                <div id="npTitle" class="text-xl font-bold text-white leading-tight truncate">—</div>
+                <div id="npArtist" class="text-slate-400 text-sm mt-1 truncate">—</div>
+            </div>
+            <button id="npHeart" class="text-2xl text-slate-400 mt-0.5 flex-shrink-0 active:scale-110 transition-transform">♡</button>
+        </div>
+
+        {{-- Barre de progression --}}
+        <input id="npProgress" type="range" min="0" max="100" value="0"
+               class="w-full accent-indigo-400 mb-1" style="height:4px">
+        <div class="flex justify-between text-xs text-slate-500 mb-5">
+            <span id="npCurTime">0:00</span>
+            <span id="npTotTime">0:00</span>
+        </div>
+
+        {{-- Contrôles de lecture --}}
+        <div class="flex items-center justify-between mb-7">
+            <button id="npPrev" class="w-12 h-12 flex items-center justify-center text-slate-300 text-3xl active:text-white">⏮</button>
+            <button id="npPlay" class="w-16 h-16 bg-white text-slate-900 rounded-full flex items-center justify-center text-2xl shadow-lg active:scale-95 transition-transform">▶</button>
+            <button id="npNext" class="w-12 h-12 flex items-center justify-center text-slate-300 text-3xl active:text-white">⏭</button>
+        </div>
+
+        {{-- Boutons d'action --}}
+        <div class="flex items-center justify-around">
+            <button id="npLyricsBtn" class="flex flex-col items-center gap-1 text-slate-400 py-2 px-4 rounded-xl active:bg-slate-800 transition-colors">
+                <span class="text-2xl leading-none font-mono">Aa</span>
+                <span class="text-[10px] uppercase tracking-wide mt-0.5">Paroles</span>
+            </button>
+            <button id="npQueueBtn" class="flex flex-col items-center gap-1 text-slate-400 py-2 px-4 rounded-xl active:bg-slate-800 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span class="text-[10px] uppercase tracking-wide mt-0.5">File</span>
+            </button>
+            <button id="npMenuBtn" class="flex flex-col items-center gap-1 text-slate-400 py-2 px-4 rounded-xl active:bg-slate-800 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h7"/></svg>
+                <span class="text-[10px] uppercase tracking-wide mt-0.5">Menu</span>
+            </button>
+        </div>
+    </div>
+
+    {{-- Sheet : paroles --}}
+    <div id="npLyricsSheet" class="absolute inset-x-0 bottom-0 rounded-t-2xl flex flex-col overflow-hidden"
+         style="background:#1e293b;height:72%;transform:translateY(100%);transition:transform 0.3s ease;padding-bottom:env(safe-area-inset-bottom,0)">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700 flex-shrink-0">
+            <span class="font-semibold">Paroles</span>
+            <button id="npLyricsClose" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        <div id="npLyricsContent" class="flex-1 overflow-y-auto p-5 text-sm text-slate-300 leading-relaxed"></div>
+    </div>
+
+    {{-- Sheet : file d'attente --}}
+    <div id="npQueueSheet" class="absolute inset-x-0 bottom-0 rounded-t-2xl flex flex-col overflow-hidden"
+         style="background:#1e293b;height:72%;transform:translateY(100%);transition:transform 0.3s ease;padding-bottom:env(safe-area-inset-bottom,0)">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700 flex-shrink-0">
+            <span class="font-semibold">File d'attente <span id="npQueueCount" class="text-slate-400 font-normal text-sm"></span></span>
+            <button id="npQueueClose" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        <div id="npQueueList" class="flex-1 overflow-y-auto divide-y divide-slate-700/40"></div>
+    </div>
+</div>
 
 <div id="lyricsPanel" class="fixed right-0 top-14 bottom-20 w-80 card border-l transform translate-x-full transition-transform duration-300 z-50 flex flex-col" style="display:none">
     <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between shrink-0">
@@ -490,38 +577,63 @@ function playIndex(i) {
     const s = state.queue[i];
     audio.src = streamUrl(s.id);
     audio.play().catch(() => {});
-    document.getElementById('trackTitle').textContent = s.title || '—';
+    const artworkUrl = coverUrl(s.coverArt || s.id, 300);
+
+    // Desktop footer
+    document.getElementById('trackTitle').textContent  = s.title  || '—';
     document.getElementById('trackArtist').textContent = `${s.artist || ''} · ${s.album || ''}`;
     document.getElementById('playBtn').textContent = '⏸';
-    document.getElementById('playBtnMobile').textContent = '⏸';
     const cover = document.getElementById('coverArt');
-    const artworkUrl = coverUrl(s.coverArt || s.id, 300);
-    if (s.coverArt || s.id) {
-        cover.innerHTML = `<img src="${coverUrl(s.coverArt || s.id, 100)}" class="w-full h-full object-cover rounded" onerror="this.parentElement.innerHTML='🎵'">`;
-    }
+    if (s.coverArt || s.id) cover.innerHTML = `<img src="${coverUrl(s.coverArt || s.id, 100)}" class="w-full h-full object-cover rounded" onerror="this.parentElement.innerHTML='🎵'">`;
+
+    // Mobile bar
+    syncMobileBar(s);
+
+    // Now Playing screen
+    syncNowPlaying(s, artworkUrl);
+
     renderQueue();
+    renderNpQueue();
     if (lyricsVisible) loadLyrics();
     document.getElementById('addToPlaylistBtn').classList.remove('hidden');
-    document.getElementById('addToPlaylistBtnMobile').classList.remove('hidden');
     document.getElementById('saveQueueBtn').classList.remove('hidden');
     updateAddToPlaylistBtn(s.id);
     saveStateToStorage();
-    // ─── Media Session API (lock screen / CarPlay / Android Auto) ───
+
+    // Media Session API (écran de veille, CarPlay, Android Auto)
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
-            title:  s.title  || '—',
-            artist: s.artist || '',
-            album:  s.album  || '',
-            artwork: [
-                { src: artworkUrl, sizes: '300x300', type: 'image/jpeg' },
-            ],
+            title: s.title || '—', artist: s.artist || '', album: s.album || '',
+            artwork: [{ src: artworkUrl, sizes: '300x300', type: 'image/jpeg' }],
         });
-        navigator.mediaSession.setActionHandler('play',          () => { audio.play(); document.getElementById('playBtn').textContent = '⏸'; document.getElementById('playBtnMobile').textContent = '⏸'; });
-        navigator.mediaSession.setActionHandler('pause',         () => { audio.pause(); document.getElementById('playBtn').textContent = '▶'; document.getElementById('playBtnMobile').textContent = '▶'; });
+        navigator.mediaSession.setActionHandler('play',          () => { audio.play(); setPlayState(true); });
+        navigator.mediaSession.setActionHandler('pause',         () => { audio.pause(); setPlayState(false); });
         navigator.mediaSession.setActionHandler('previoustrack', () => playIndex(state.currentIndex - 1));
         navigator.mediaSession.setActionHandler('nexttrack',     () => playIndex(state.currentIndex + 1));
         navigator.mediaSession.setActionHandler('seekto',        e  => { if (e.seekTime !== undefined) audio.currentTime = e.seekTime; });
     }
+}
+
+function setPlayState(playing) {
+    const icon = playing ? '⏸' : '▶';
+    document.getElementById('playBtn').textContent  = icon;
+    document.getElementById('mbPlay').textContent   = icon;
+    document.getElementById('npPlay').textContent   = icon;
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+}
+
+function syncMobileBar(s) {
+    document.getElementById('mbTitle').textContent  = s.title  || '—';
+    document.getElementById('mbArtist').textContent = s.artist || s.album || '';
+    const el = document.getElementById('mbCoverArt');
+    if (s.coverArt || s.id) el.innerHTML = `<img src="${coverUrl(s.coverArt || s.id, 80)}" class="w-full h-full object-cover rounded-lg" onerror="this.parentElement.innerHTML='🎵'">`;
+}
+
+function syncNowPlaying(s, artworkUrl) {
+    document.getElementById('npTitle').textContent  = s.title  || '—';
+    document.getElementById('npArtist').textContent = `${s.artist || ''}${s.album ? ' · ' + s.album : ''}`;
+    const cover = document.getElementById('npCoverArt');
+    cover.innerHTML = `<img src="${artworkUrl || coverUrl(s.coverArt || s.id, 300)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='🎵'">`;
 }
 
 function renderQueue() {
@@ -543,32 +655,55 @@ function togglePlay() {
     if (audio.paused) audio.play();
     else audio.pause();
 }
-audio.addEventListener('play',  () => { document.getElementById('playBtn').textContent = '⏸'; document.getElementById('playBtnMobile').textContent = '⏸'; if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-audio.addEventListener('pause', () => { document.getElementById('playBtn').textContent = '▶'; document.getElementById('playBtnMobile').textContent = '▶'; if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
-
-document.getElementById('playBtn').onclick       = togglePlay;
-document.getElementById('playBtnMobile').onclick = togglePlay;
-document.getElementById('prevBtn').onclick       = () => playIndex(state.currentIndex - 1);
-document.getElementById('nextBtn').onclick       = () => playIndex(state.currentIndex + 1);
-document.getElementById('prevBtnMobile').onclick = () => playIndex(state.currentIndex - 1);
-document.getElementById('nextBtnMobile').onclick = () => playIndex(state.currentIndex + 1);
-document.getElementById('addToPlaylistBtnMobile').onclick = () => {
-    const s = state.queue[state.currentIndex];
-    if (!s) return;
-    openPlaylistPicker(s.id, s.title);
-};
+audio.addEventListener('play',  () => setPlayState(true));
+audio.addEventListener('pause', () => setPlayState(false));
 audio.addEventListener('ended', () => playIndex(state.currentIndex + 1));
 audio.addEventListener('timeupdate', () => {
-    const p = document.getElementById('progress');
-    if (audio.duration) p.value = (audio.currentTime / audio.duration) * 100;
-    document.getElementById('curTime').textContent = formatTime(audio.currentTime);
-    document.getElementById('totTime').textContent = formatTime(audio.duration || 0);
+    const pct = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+    document.getElementById('progress').value   = pct;
+    document.getElementById('npProgress').value = pct;
+    const cur = formatTime(audio.currentTime);
+    const tot = formatTime(audio.duration || 0);
+    document.getElementById('curTime').textContent   = cur;
+    document.getElementById('totTime').textContent   = tot;
+    document.getElementById('npCurTime').textContent = cur;
+    document.getElementById('npTotTime').textContent = tot;
 });
-document.getElementById('progress').oninput = (e) => {
-    if (audio.duration) audio.currentTime = (e.target.value / 100) * audio.duration;
-};
-document.getElementById('volume').oninput = (e) => { audio.volume = e.target.value / 100; };
+
+// Desktop controls
+document.getElementById('playBtn').onclick = togglePlay;
+document.getElementById('prevBtn').onclick = () => playIndex(state.currentIndex - 1);
+document.getElementById('nextBtn').onclick = () => playIndex(state.currentIndex + 1);
+document.getElementById('progress').oninput = e => { if (audio.duration) audio.currentTime = (e.target.value / 100) * audio.duration; };
+document.getElementById('volume').oninput   = e => { audio.volume = e.target.value / 100; };
 audio.volume = 0.8;
+
+// Mobile bar
+document.getElementById('mbPlay').addEventListener('click', e => { e.stopPropagation(); togglePlay(); });
+document.getElementById('mbNext').addEventListener('click', e => { e.stopPropagation(); playIndex(state.currentIndex + 1); });
+document.getElementById('mobileBar').addEventListener('click', () => {
+    if (state.currentIndex >= 0) openNowPlaying();
+});
+
+// Now Playing controls
+document.getElementById('npPlay').onclick    = togglePlay;
+document.getElementById('npPrev').onclick    = () => playIndex(state.currentIndex - 1);
+document.getElementById('npNext').onclick    = () => playIndex(state.currentIndex + 1);
+document.getElementById('npClose').onclick   = closeNowPlaying;
+document.getElementById('npProgress').oninput = e => { if (audio.duration) audio.currentTime = (e.target.value / 100) * audio.duration; };
+document.getElementById('npHeart').onclick   = () => {
+    const s = state.queue[state.currentIndex];
+    if (s) openPlaylistPicker(s.id, s.title);
+};
+document.getElementById('npOptions').onclick = () => {
+    const s = state.queue[state.currentIndex];
+    if (s) openPlaylistPicker(s.id, s.title);
+};
+document.getElementById('npMenuBtn').onclick  = () => { closeNowPlaying(); setTimeout(openSidebar, 350); };
+document.getElementById('npLyricsBtn').onclick = () => openNpSheet('lyrics');
+document.getElementById('npQueueBtn').onclick  = () => openNpSheet('queue');
+document.getElementById('npLyricsClose').onclick = () => closeNpSheet('lyrics');
+document.getElementById('npQueueClose').onclick  = () => closeNpSheet('queue');
 
 // ─── Lyrics ───
 const lyricsPanel = document.getElementById('lyricsPanel');
@@ -651,21 +786,25 @@ function renderSyncedLyrics() {
 }
 
 audio.addEventListener('timeupdate', () => {
-    if (!lyricsSynced || !lyricsVisible || !lyricsLines.length) return;
+    if (!lyricsSynced || !lyricsLines.length) return;
     const t = audio.currentTime;
     let active = -1;
     for (let i = lyricsLines.length - 1; i >= 0; i--) {
         if (t >= lyricsLines[i].time) { active = i; break; }
     }
-    lyricsContent.querySelectorAll('.lyrics-line').forEach((el, i) => {
-        if (i === active) {
-            el.classList.add('text-white', 'font-semibold', 'text-base');
-            el.classList.remove('text-slate-500', 'text-sm');
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-            el.classList.remove('text-white', 'font-semibold', 'text-base');
-            el.classList.add('text-slate-500', 'text-sm');
-        }
+    // Highlight dans le panneau desktop ET dans le sheet mobile
+    [lyricsContent, document.getElementById('npLyricsContent')].forEach(container => {
+        if (!container) return;
+        container.querySelectorAll('.lyrics-line').forEach((el, i) => {
+            if (i === active) {
+                el.classList.add('text-white', 'font-semibold', 'text-base');
+                el.classList.remove('text-slate-500', 'text-sm');
+                if (container === lyricsContent && lyricsVisible) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                el.classList.remove('text-white', 'font-semibold', 'text-base');
+                el.classList.add('text-slate-500', 'text-sm');
+            }
+        });
     });
 });
 
@@ -1060,14 +1199,14 @@ function openPlaylistPicker(songId, songTitle) {
 function updateAddToPlaylistBtn(songId) {
     const heart  = document.getElementById('addToPlaylistHeart');
     const label  = document.getElementById('addToPlaylistLabel');
-    const heartM = document.getElementById('addToPlaylistBtnMobile');
+    const npHeart = document.getElementById('npHeart');
     const pl = songId ? songPlaylistMap.get(songId) : null;
     if (heart) {
         heart.textContent = pl ? '♥' : '♡';
         heart.className   = pl ? 'text-indigo-400' : 'text-slate-400';
     }
     if (label) { label.textContent = pl || ''; pl ? label.classList.remove('hidden') : label.classList.add('hidden'); }
-    if (heartM) heartM.textContent = pl ? '♥' : '♡';
+    if (npHeart) { npHeart.textContent = pl ? '♥' : '♡'; npHeart.className = pl ? 'text-2xl text-indigo-400 mt-0.5 flex-shrink-0 active:scale-110 transition-transform' : 'text-2xl text-slate-400 mt-0.5 flex-shrink-0 active:scale-110 transition-transform'; }
 }
 
 async function addCurrentToPlaylist(playlistId, playlistName) {
@@ -1230,6 +1369,99 @@ window.addEventListener('appinstalled', () => {
     pwaInstallBtn.classList.add('hidden');
     pwaInstallBanner.classList.remove('visible');
 });
+
+// ─── Now Playing Screen ───
+const npScreen = document.getElementById('nowPlayingScreen');
+
+function openNowPlaying() {
+    npScreen.style.display = 'flex';
+    requestAnimationFrame(() => { npScreen.style.transform = 'translateY(0)'; });
+    document.body.style.overflow = 'hidden';
+}
+function closeNowPlaying() {
+    npScreen.style.transform = 'translateY(100%)';
+    document.body.style.overflow = '';
+    closeNpSheet('lyrics');
+    closeNpSheet('queue');
+}
+
+// Swipe vers le bas pour fermer
+let npTouchStartY = 0;
+let npTouchDelta  = 0;
+npScreen.addEventListener('touchstart', e => { npTouchStartY = e.touches[0].clientY; npTouchDelta = 0; }, { passive: true });
+npScreen.addEventListener('touchmove',  e => {
+    npTouchDelta = e.touches[0].clientY - npTouchStartY;
+    if (npTouchDelta > 0) npScreen.style.transform = `translateY(${npTouchDelta}px)`;
+}, { passive: true });
+npScreen.addEventListener('touchend', () => {
+    if (npTouchDelta > 80) { closeNowPlaying(); }
+    else { npScreen.style.transform = 'translateY(0)'; }
+    npTouchDelta = 0;
+});
+
+// ─── Sheets (paroles + file) dans Now Playing ───
+function openNpSheet(type) {
+    const sheet = document.getElementById(type === 'lyrics' ? 'npLyricsSheet' : 'npQueueSheet');
+    sheet.style.transform = 'translateY(0)';
+    if (type === 'lyrics') loadNpLyrics();
+    if (type === 'queue')  renderNpQueue();
+}
+function closeNpSheet(type) {
+    const sheet = document.getElementById(type === 'lyrics' ? 'npLyricsSheet' : 'npQueueSheet');
+    sheet.style.transform = 'translateY(100%)';
+}
+
+function renderNpQueue() {
+    const list = document.getElementById('npQueueList');
+    const count = document.getElementById('npQueueCount');
+    if (!list) return;
+    list.innerHTML = '';
+    count.textContent = `(${state.queue.length})`;
+    state.queue.forEach((s, i) => {
+        const row = document.createElement('div');
+        const active = i === state.currentIndex;
+        row.className = `flex items-center gap-3 px-5 py-3 cursor-pointer ${active ? 'bg-indigo-600/30' : 'active:bg-slate-700/50'} transition`;
+        row.innerHTML = `
+            <div class="w-8 h-8 flex-shrink-0 rounded bg-slate-700 flex items-center justify-center text-sm overflow-hidden">
+                <img src="${coverUrl(s.coverArt || s.id, 40)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='♪'">
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="text-sm truncate ${active ? 'text-indigo-300 font-medium' : 'text-slate-200'}">${escapeHtml(s.title || '—')}</div>
+                <div class="text-xs text-slate-500 truncate">${escapeHtml(s.artist || '')}</div>
+            </div>
+            ${active ? '<span class="text-indigo-400 text-lg flex-shrink-0">▶</span>' : ''}`;
+        row.onclick = () => { playIndex(i); closeNpSheet('queue'); };
+        list.appendChild(row);
+    });
+    // Scroll vers la piste active
+    const activeRow = list.children[state.currentIndex];
+    if (activeRow) setTimeout(() => activeRow.scrollIntoView({ block: 'center' }), 100);
+}
+
+async function loadNpLyrics() {
+    const target = document.getElementById('npLyricsContent');
+    const s = state.queue[state.currentIndex];
+    if (!s) { target.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune piste en cours</div>'; return; }
+    target.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement…</div>';
+    try {
+        const resp = await ndCall('getLyricsBySongId.view', { id: s.id });
+        const list = resp.lyricsList?.structuredLyrics || [];
+        if (list.length) {
+            const synced = list.find(l => l.synced) || list[0];
+            if (synced.line) {
+                target.innerHTML = synced.line.map(l => `<p class="py-1.5">${escapeHtml(l.value || '')}</p>`).join('');
+                return;
+            }
+        }
+        const resp2 = await ndCall('getLyrics.view', { artist: s.artist || '', title: s.title || '' });
+        const text = resp2.lyrics?.value;
+        target.innerHTML = text
+            ? text.split('\n').map(l => `<p class="py-1">${escapeHtml(l)}</p>`).join('')
+            : '<div class="text-slate-500 text-center py-8">Aucune parole disponible</div>';
+    } catch {
+        target.innerHTML = '<div class="text-slate-500 text-center py-8">Aucune parole disponible</div>';
+    }
+}
 
 // ─── Sidebar mobile ───
 function openSidebar() {
