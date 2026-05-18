@@ -750,6 +750,19 @@ async function loadPlaylistInPlayer(id, name) {
                     <div class="text-xs text-slate-400 truncate">${escapeHtml(s.artist||'')}${s.album?' · '+escapeHtml(s.album):''}</div>
                 </div>
                 <span class="text-xs text-slate-500">${formatTime(s.duration||0)}</span>`;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'opacity-0 group-hover:opacity-100 ml-1 text-slate-500 hover:text-red-400 transition text-lg leading-none flex-shrink-0';
+            removeBtn.title = 'Retirer de la playlist';
+            removeBtn.textContent = '×';
+            removeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    await portalApi('DELETE', `/portal/playlists/${id}/tracks`, { index: i });
+                    playerToast(`"${s.title}" retiré de la playlist.`);
+                    loadPlaylistInPlayer(id, name);
+                } catch(err) { playerToast(err.message, false); }
+            });
+            el.appendChild(removeBtn);
             el.onclick = () => { state.queue = [...songs]; playIndex(i); };
             container.appendChild(el);
         });
