@@ -121,6 +121,19 @@
     </div>
 </div>
 
+<div id="renamePlaylistModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
+    <div class="bg-slate-800 border border-slate-600 rounded-xl p-5 w-72 shadow-xl">
+        <h3 class="font-semibold text-sm mb-3">Renommer la playlist</h3>
+        <input type="hidden" id="renamePlaylistId">
+        <input id="renamePlaylistInput" type="text" placeholder="Nouveau nom…" maxlength="200"
+            class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 mb-3">
+        <div class="flex gap-2">
+            <button onclick="document.getElementById('renamePlaylistModal').style.display='none'" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs transition">Annuler</button>
+            <button onclick="confirmRenamePlaylist()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">Renommer</button>
+        </div>
+    </div>
+</div>
+
 <div id="newPlaylistModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
     <div class="bg-slate-800 border border-slate-600 rounded-xl p-5 w-72 shadow-xl">
         <h3 class="font-semibold text-sm mb-3">Nouvelle playlist</h3>
@@ -714,12 +727,68 @@ function renderPlaylistNav() {
         return;
     }
     playerPlaylists.forEach(pl => {
+        const row = document.createElement('div');
+        row.className = 'group flex items-center gap-1 rounded hover:bg-slate-700';
+
         const btn = document.createElement('button');
-        btn.className = 'nav-btn text-left px-3 py-2 rounded hover:bg-slate-700 w-full text-xs truncate';
+        btn.className = 'nav-btn text-left px-3 py-2 flex-1 text-xs truncate min-w-0';
         btn.innerHTML = `♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>`;
         btn.addEventListener('click', () => loadPlaylistInPlayer(pl.id, pl.name));
-        el.appendChild(btn);
+
+        const menu = document.createElement('button');
+        menu.className = 'opacity-0 group-hover:opacity-100 px-1.5 py-1 text-slate-500 hover:text-slate-200 flex-shrink-0 transition text-base leading-none';
+        menu.title = 'Options';
+        menu.textContent = '⋯';
+        menu.addEventListener('click', (e) => { e.stopPropagation(); openPlaylistMenu(e, pl); });
+
+        row.appendChild(btn);
+        row.appendChild(menu);
+        el.appendChild(row);
     });
+}
+
+function openPlaylistMenu(e, pl) {
+    document.getElementById('playlistCtxMenu')?.remove();
+    const m = document.createElement('div');
+    m.id = 'playlistCtxMenu';
+    m.className = 'fixed z-[9999] bg-slate-800 border border-slate-600 rounded shadow-xl py-1 text-xs w-36';
+    const rect = e.target.getBoundingClientRect();
+    m.style.top = rect.bottom + 4 + 'px';
+    m.style.left = rect.left + 'px';
+
+    const renameOpt = document.createElement('button');
+    renameOpt.className = 'w-full text-left px-3 py-2 hover:bg-slate-700 transition';
+    renameOpt.textContent = '✏️  Renommer';
+    renameOpt.addEventListener('click', () => { m.remove(); openRenamePlaylistModal(pl); });
+
+    const deleteOpt = document.createElement('button');
+    deleteOpt.className = 'w-full text-left px-3 py-2 hover:bg-slate-700 text-red-400 transition';
+    deleteOpt.textContent = '🗑  Supprimer';
+    deleteOpt.addEventListener('click', () => { m.remove(); deletePlaylistFromPlayer(pl); });
+
+    m.appendChild(renameOpt);
+    m.appendChild(deleteOpt);
+    document.body.appendChild(m);
+    setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
+}
+
+function openRenamePlaylistModal(pl) {
+    document.getElementById('renamePlaylistId').value = pl.id;
+    document.getElementById('renamePlaylistInput').value = pl.name;
+    document.getElementById('renamePlaylistModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('renamePlaylistInput').select(), 50);
+}
+
+async function deletePlaylistFromPlayer(pl) {
+    if (!confirm(`Supprimer la playlist "${pl.name}" ?`)) return;
+    try {
+        await portalApi('DELETE', `/portal/playlists/${pl.id}`);
+        playerToast(`Playlist "${pl.name}" supprimée.`);
+        loadPlayerPlaylists();
+        viewTitle.textContent = 'Artistes';
+        viewCount.textContent = '';
+        mainArea.innerHTML = '';
+    } catch(e) { playerToast(e.message, false); }
 }
 
 async function loadPlaylistInPlayer(id, name) {
@@ -842,6 +911,20 @@ function openNewPlaylistFromPicker() {
 }
 function closeNewPlaylistModal() { document.getElementById('newPlaylistModal').style.display = 'none'; }
 document.getElementById('newPlaylistName').addEventListener('keydown', e => { if (e.key === 'Enter') createAndAddPlaylist(); });
+
+async function confirmRenamePlaylist() {
+    const id = document.getElementById('renamePlaylistId').value;
+    const name = document.getElementById('renamePlaylistInput').value.trim();
+    if (!name) return;
+    document.getElementById('renamePlaylistModal').style.display = 'none';
+    try {
+        await portalApi('PUT', `/portal/playlists/${id}`, { name });
+        playerToast(`Playlist renommée en "${name}".`);
+        loadPlayerPlaylists();
+        if (viewTitle.textContent && viewTitle.textContent !== 'Artistes') viewTitle.textContent = name;
+    } catch(e) { playerToast(e.message, false); }
+}
+document.getElementById('renamePlaylistInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmRenamePlaylist(); });
 
 async function createAndAddPlaylist() {
     const name = document.getElementById('newPlaylistName').value.trim();
