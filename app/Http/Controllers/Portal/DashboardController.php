@@ -350,7 +350,7 @@ class DashboardController extends Controller
             ],
             'tickets_support' => $tickets,
             'feedbacks' => Feedback::where('user_id', $user->id)->get(['type', 'subject', 'body', 'status', 'created_at']),
-            'appareils' => UserDevice::where('user_id', $user->id)->get(['device_name', 'ip_address', 'last_seen_at', 'is_active', 'created_at']),
+            'appareils' => UserDevice::where('user_id', $user->id)->get(['device_name', 'device_type', 'ip_address', 'is_active', 'last_active', 'created_at']),
         ];
 
         $filename = 'monflow-export-' . now()->format('Y-m-d') . '.json';
