@@ -12,6 +12,13 @@
     <div class="flex gap-2">
         <a href="/admin/users/{{ $user->id }}/edit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition">Modifier</a>
 
+        @if(!$user->is_admin && $user->status !== 'deleted')
+            <form method="POST" action="/admin/users/{{ $user->id }}/impersonate" onsubmit="return confirm('Se connecter en tant que {{ $user->username }} ?')">
+                @csrf
+                <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium transition">Impersonate</button>
+            </form>
+        @endif
+
         @if($user->status === 'active')
             <form method="POST" action="/admin/users/{{ $user->id }}/suspend" onsubmit="return confirm('Suspendre cet utilisateur ?')">
                 @csrf

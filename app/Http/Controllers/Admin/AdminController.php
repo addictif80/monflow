@@ -7,7 +7,7 @@ use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, 
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Hash, DB, Log};
+use Illuminate\Support\Facades\{Hash, DB, Log, Auth};
 
 class AdminController extends Controller
 {
@@ -746,5 +746,50 @@ class AdminController extends Controller
     {
         $nl = Newsletter::findOrFail($id);
         return response($nl->html_body)->header('Content-Type', 'text/html');
+    }
+
+    // ─── Impersonate ───
+
+    public function impersonate(string $id, Request $request)
+    {
+        $target = User::findOrFail($id);
+
+        if ($target->is_admin) {
+            return back()->with('error', 'Impossible d\'usurper un compte administrateur.');
+        }
+        if ($target->status === 'deleted') {
+            return back()->with('error', 'Impossible d\'usurper un compte supprimé.');
+        }
+
+        $adminId = Auth::id();
+        AuditLog::record('user.impersonate_start', $target, ['admin_id' => $adminId]);
+
+        $request->session()->put('impersonating_admin_id', $adminId);
+        Auth::loginUsingId($target->id);
+
+        return redirect('/portal')->with('success', "Vous naviguez en tant que {$target->username}. Utilisez le bouton « Revenir admin » pour reprendre votre session.");
+    }
+
+    public function stopImpersonate(Request $request)
+    {
+        $adminId = $request->session()->pull('impersonating_admin_id');
+        if (!$adminId) {
+            return redirect('/admin');
+        }
+
+        $admin = User::find($adminId);
+        if (!$admin || !$admin->is_admin) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect('/login')->with('error', 'Session invalide.');
+        }
+
+        $impersonatedUser = Auth::user();
+        AuditLog::record('user.impersonate_stop', $impersonatedUser, ['admin_id' => $adminId]);
+
+        Auth::loginUsingId($adminId);
+
+        return redirect("/admin/users/{$impersonatedUser->id}");
     }
 }
