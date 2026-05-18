@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>Lecteur — MonFlow</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
@@ -707,14 +708,18 @@ async function loadPlayerPlaylists() {
 
 function renderPlaylistNav() {
     const el = document.getElementById('playlistNavList');
+    el.innerHTML = '';
     if (!playerPlaylists.length) {
         el.innerHTML = '<div class="px-3 text-xs text-slate-500 italic">Aucune playlist</div>';
         return;
     }
-    el.innerHTML = playerPlaylists.map(pl => `
-        <button class="nav-btn text-left px-3 py-2 rounded hover:bg-slate-700 w-full text-xs truncate" onclick="loadPlaylistInPlayer('${pl.id}', ${JSON.stringify(pl.name)})">
-            ♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>
-        </button>`).join('');
+    playerPlaylists.forEach(pl => {
+        const btn = document.createElement('button');
+        btn.className = 'nav-btn text-left px-3 py-2 rounded hover:bg-slate-700 w-full text-xs truncate';
+        btn.innerHTML = `♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>`;
+        btn.addEventListener('click', () => loadPlaylistInPlayer(pl.id, pl.name));
+        el.appendChild(btn);
+    });
 }
 
 async function loadPlaylistInPlayer(id, name) {
@@ -791,13 +796,18 @@ function openPlaylistPicker(songId, songTitle) {
     pickerTargetSongTitle = songTitle;
     document.getElementById('pickerSongInfo').textContent = `"${songTitle}"`;
     const list = document.getElementById('pickerList');
-    list.innerHTML = playerPlaylists.length
-        ? playerPlaylists.map(pl => `
-            <button onclick="addCurrentToPlaylist('${pl.id}', '${escapeHtml(pl.name)}')"
-                class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-xs truncate transition">
-                ♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>
-            </button>`).join('')
-        : '<div class="text-slate-500 text-xs py-2 text-center">Aucune playlist</div>';
+    list.innerHTML = '';
+    if (playerPlaylists.length) {
+        playerPlaylists.forEach(pl => {
+            const btn = document.createElement('button');
+            btn.className = 'w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-xs truncate transition';
+            btn.innerHTML = `♪ ${escapeHtml(pl.name)} <span class="text-slate-500">(${pl.songCount||0})</span>`;
+            btn.addEventListener('click', () => addCurrentToPlaylist(pl.id, pl.name));
+            list.appendChild(btn);
+        });
+    } else {
+        list.innerHTML = '<div class="text-slate-500 text-xs py-2 text-center">Aucune playlist</div>';
+    }
     document.getElementById('playlistPickerModal').style.display = 'flex';
 }
 
