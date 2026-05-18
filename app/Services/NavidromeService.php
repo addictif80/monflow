@@ -391,4 +391,101 @@ class NavidromeService
             return ['success' => false, 'message' => "Erreur: {$e->getMessage()}"];
         }
     }
+
+    // ─── Subsonic Playlist API (user credentials) ───
+
+    private function subsonicAsUser(string $username, string $password, string $endpoint, array $extraParams = []): array
+    {
+        $salt = bin2hex(random_bytes(6));
+        $qs = http_build_query(array_merge([
+            'u' => $username, 't' => md5($password . $salt), 's' => $salt,
+            'v' => '1.16.1', 'c' => 'MonFlow', 'f' => 'json',
+        ], $extraParams));
+        $url = rtrim(config('navidrome.public_url'), '/') . "/rest/{$endpoint}?{$qs}";
+        $response = retry(3, fn() => Http::timeout(10)->get($url),
+            fn(int $a) => $a * 1000, fn($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
+        $response->throw();
+        $data = $response->json('subsonic-response');
+        if (($data['status'] ?? '') !== 'ok') {
+            throw new \RuntimeException($data['error']['message'] ?? 'Subsonic API error');
+        }
+        return $data;
+    }
+
+    private function subsonicUrlAsUser(string $username, string $password, string $endpoint, array $baseParams, array $repeatedParams = []): string
+    {
+        $salt = bin2hex(random_bytes(6));
+        $qs = http_build_query(array_merge([
+            'u' => $username, 't' => md5($password . $salt), 's' => $salt,
+            'v' => '1.16.1', 'c' => 'MonFlow', 'f' => 'json',
+        ], $baseParams));
+        foreach ($repeatedParams as [$key, $value]) {
+            $qs .= '&' . urlencode($key) . '=' . urlencode($value);
+        }
+        return rtrim(config('navidrome.public_url'), '/') . "/rest/{$endpoint}?{$qs}";
+    }
+
+    public function getPlaylists(string $username, string $password): array
+    {
+        $data = $this->subsonicAsUser($username, $password, 'getPlaylists.view');
+        $raw = $data['playlists']['playlist'] ?? [];
+        // Navidrome returns a single object instead of array when there's only one playlist
+        return isset($raw['id']) ? [$raw] : array_values($raw);
+    }
+
+    public function getPlaylist(string $username, string $password, string $id): array
+    {
+        $data = $this->subsonicAsUser($username, $password, 'getPlaylist.view', ['id' => $id]);
+        $pl = $data['playlist'] ?? [];
+        // Normalise: entry can be a single object when there's only one song
+        if (isset($pl['entry']) && isset($pl['entry']['id'])) {
+            $pl['entry'] = [$pl['entry']];
+        }
+        $pl['entry'] = $pl['entry'] ?? [];
+        return $pl;
+    }
+
+    public function createPlaylist(string $username, string $password, string $name): array
+    {
+        $data = $this->subsonicAsUser($username, $password, 'createPlaylist.view', ['name' => $name]);
+        return $data['playlist'] ?? [];
+    }
+
+    public function renamePlaylist(string $username, string $password, string $id, string $name): void
+    {
+        $this->subsonicAsUser($username, $password, 'updatePlaylist.view', ['playlistId' => $id, 'name' => $name]);
+    }
+
+    public function addSongsToPlaylist(string $username, string $password, string $playlistId, array $songIds): void
+    {
+        if (empty($songIds)) return;
+        $repeated = array_map(fn($id) => ['songId', $id], $songIds);
+        $url = $this->subsonicUrlAsUser($username, $password, 'updatePlaylist.view', ['playlistId' => $playlistId], $repeated);
+        $response = retry(3, fn() => Http::timeout(10)->get($url),
+            fn(int $a) => $a * 1000, fn($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
+        $response->throw();
+    }
+
+    public function removeSongsFromPlaylist(string $username, string $password, string $playlistId, array $indices): void
+    {
+        if (empty($indices)) return;
+        $repeated = array_map(fn($i) => ['songIndexToRemove', (string)(int)$i], $indices);
+        $url = $this->subsonicUrlAsUser($username, $password, 'updatePlaylist.view', ['playlistId' => $playlistId], $repeated);
+        $response = retry(3, fn() => Http::timeout(10)->get($url),
+            fn(int $a) => $a * 1000, fn($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
+        $response->throw();
+    }
+
+    public function deletePlaylist(string $username, string $password, string $id): void
+    {
+        $this->subsonicAsUser($username, $password, 'deletePlaylist.view', ['id' => $id]);
+    }
+
+    public function searchSongsSubsonic(string $username, string $password, string $query, int $limit = 20): array
+    {
+        $data = $this->subsonicAsUser($username, $password, 'search3.view', [
+            'query' => $query, 'songCount' => $limit, 'albumCount' => 0, 'artistCount' => 0,
+        ]);
+        return $data['searchResult3']['song'] ?? [];
+    }
 }
