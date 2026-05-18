@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             '/portal/playlists',
             '/portal/playlists/*',
+            '/portal/shared/*',
         ]);
 
         $middleware->alias([

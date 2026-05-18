@@ -73,17 +73,48 @@
     </div>
     @endif
 
-    {{-- Playlists --}}
+    {{-- Playlists publiques --}}
     @if(count($playlists) > 0)
     <div>
-        <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-4">Playlists</h2>
+        <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-4">Playlists publiques</h2>
         <div class="space-y-2">
             @foreach($playlists as $pl)
-            <div class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex items-center justify-between">
-                <div class="font-medium text-sm">{{ $pl['name'] }}</div>
-                <div class="text-xs text-gray-400">
-                    {{ $pl['songCount'] ?? 0 }} titre{{ ($pl['songCount'] ?? 0) > 1 ? 's' : '' }}
+            @php $sharedId = $pl['shared_playlist_id'] ?? null; @endphp
+            <div class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                    <div class="font-medium text-sm truncate">{{ $pl['name'] }}</div>
+                    <div class="text-xs text-gray-500 mt-0.5">
+                        {{ $pl['songCount'] ?? 0 }} titre{{ ($pl['songCount'] ?? 0) > 1 ? 's' : '' }}
+                        @if(($pl['subscriber_count'] ?? 0) > 0)
+                            · {{ $pl['subscriber_count'] }} abonné{{ $pl['subscriber_count'] > 1 ? 's' : '' }}
+                        @endif
+                    </div>
                 </div>
+                @if($sharedId)
+                    @auth
+                        @if(Auth::id() !== $user->id)
+                            @if(isset($viewerSubscribed[$sharedId]))
+                            <form action="/portal/shared/{{ $sharedId }}/unsubscribe" method="POST" class="flex-shrink-0">
+                                @csrf @method('DELETE')
+                                <button class="px-3 py-1 bg-gray-700 hover:bg-red-700/60 text-gray-300 hover:text-red-300 rounded text-xs transition">
+                                    ✓ Abonné
+                                </button>
+                            </form>
+                            @else
+                            <form action="/portal/shared/{{ $sharedId }}/subscribe" method="POST" class="flex-shrink-0">
+                                @csrf
+                                <button class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">
+                                    + S'abonner
+                                </button>
+                            </form>
+                            @endif
+                        @endif
+                    @else
+                    <a href="/login" class="flex-shrink-0 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">
+                        + S'abonner
+                    </a>
+                    @endauth
+                @endif
             </div>
             @endforeach
         </div>

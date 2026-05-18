@@ -101,7 +101,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/portal/playlists/{id}', [PlaylistController::class, 'destroy']);
     Route::post('/portal/playlists/{id}/tracks', [PlaylistController::class, 'addTracks']);
     Route::delete('/portal/playlists/{id}/tracks', [PlaylistController::class, 'removeTrack']);
+    Route::get('/portal/playlists/{id}/info', [PlaylistController::class, 'info']);
+    Route::post('/portal/playlists/{id}/toggle-public', [PlaylistController::class, 'togglePublic']);
     Route::post('/portal/playlists/{id}/share', [PlaylistController::class, 'share']);
+    Route::post('/portal/shared/{sharedId}/subscribe', [PlaylistController::class, 'subscribe'])->name('playlist.subscribe');
+    Route::delete('/portal/shared/{sharedId}/unsubscribe', [PlaylistController::class, 'unsubscribe']);
 
     // GDPR data export
     Route::get('/portal/export-data', [DashboardController::class, 'exportData']);
