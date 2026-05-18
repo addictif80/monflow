@@ -395,6 +395,8 @@ function playIndex(i) {
     }
     renderQueue();
     if (lyricsVisible) loadLyrics();
+    document.getElementById('addToPlaylistBtn').classList.remove('hidden');
+    document.getElementById('saveQueueBtn').classList.remove('hidden');
 }
 
 function renderQueue() {
@@ -835,15 +837,6 @@ async function createAndAddPlaylist() {
         playerToast(`Playlist "${name}" créée.`);
         loadPlayerPlaylists();
     } catch(e) { playerToast(e.message, false); }
-}
-
-// Show/hide addToPlaylist button and saveQueue button based on state
-const origPlayIndex = playIndex;
-function playIndex(i) {
-    origPlayIndex(i);
-    const hasTrack = i >= 0 && i < state.queue.length;
-    document.getElementById('addToPlaylistBtn').classList.toggle('hidden', !hasTrack);
-    document.getElementById('saveQueueBtn').classList.toggle('hidden', state.queue.length === 0);
 }
 
 // ─── Init ───
