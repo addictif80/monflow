@@ -89,6 +89,9 @@ Route::middleware('auth')->group(function () {
     // GDPR data export
     Route::get('/portal/export-data', [DashboardController::class, 'exportData']);
 
+    // Stop impersonation (admin only, via session)
+    Route::post('/portal/stop-impersonate', [AdminController::class, 'stopImpersonate']);
+
     // Account deletion
     Route::match(['get', 'post'], '/portal/delete-account', [DashboardController::class, 'deleteAccount']);
 
@@ -126,6 +129,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/users/{id}/delete', [AdminController::class, 'userDelete']);
     Route::post('/users/{id}/release-email', [AdminController::class, 'userReleaseEmail']);
     Route::post('/users/{id}/wallet-adjust', [AdminController::class, 'walletAdjust']);
+    Route::post('/users/{id}/impersonate', [AdminController::class, 'impersonate']);
 
     // Plans
     Route::get('/plans', [AdminController::class, 'plans']);
