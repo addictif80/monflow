@@ -70,7 +70,7 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-5">
         <div class="flex items-center gap-5 mb-4">
             @if(Auth::user()->avatar_path)
-                <img src="{{ asset('storage/' . Auth::user()->avatar_path) }}" alt="Avatar"
+                <img src="{{ asset(Auth::user()->avatar_path) }}" alt="Avatar"
                      class="w-16 h-16 rounded-full object-cover ring-2 ring-indigo-500/40">
             @else
                 <div class="w-16 h-16 rounded-full bg-indigo-700 flex items-center justify-center text-2xl font-bold text-white">
