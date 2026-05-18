@@ -811,6 +811,26 @@ async function deletePlaylistFromPlayer(pl) {
     } catch(e) { playerToast(e.message, false); }
 }
 
+function renderPublicToggle(btn, memberInfo, info, playlistId) {
+    const isOwner = info.role === 'owner';
+    const isPublic = info.is_public;
+    btn.className = `px-2 py-1 rounded transition text-xs ${isPublic ? 'bg-green-700/50 text-green-300 hover:bg-green-700' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`;
+    btn.textContent = isPublic ? '🌐 Publique' : '🔒 Privée';
+    btn.disabled = !isOwner;
+    if (!isOwner) btn.classList.add('opacity-50', 'cursor-not-allowed');
+    else {
+        btn.onclick = async () => {
+            try {
+                const res = await portalApi('POST', `/portal/playlists/${playlistId}/toggle-public`);
+                renderPublicToggle(btn, memberInfo, { ...info, is_public: res.is_public, member_count: res.member_count }, playlistId);
+            } catch(e) { playerToast(e.message, false); }
+        };
+    }
+    memberInfo.textContent = info.member_count > 0
+        ? `${info.member_count} membre${info.member_count > 1 ? 's' : ''}`
+        : '';
+}
+
 async function loadPlaylistInPlayer(id, name) {
     viewTitle.textContent = name;
     mainArea.innerHTML = '<div class="text-slate-500 text-center py-8">Chargement…</div>';
@@ -831,6 +851,21 @@ async function loadPlaylistInPlayer(id, name) {
         header.children[1].onclick = () => { state.queue.push(...songs); renderQueue(); };
         header.children[2].onclick = () => openShareModal(id, name);
         container.appendChild(header);
+
+        // Visibility row: load MonFlow metadata (public/private toggle + member count)
+        const metaRow = document.createElement('div');
+        metaRow.className = 'flex items-center gap-3 text-xs mb-3';
+        const publicBtn = document.createElement('button');
+        publicBtn.className = 'px-2 py-1 rounded transition text-xs';
+        publicBtn.textContent = '⟳';
+        const memberInfo = document.createElement('span');
+        memberInfo.className = 'text-slate-500';
+        metaRow.appendChild(publicBtn);
+        metaRow.appendChild(memberInfo);
+        container.appendChild(metaRow);
+        portalApi('GET', `/portal/playlists/${id}/info`).then(info => {
+            renderPublicToggle(publicBtn, memberInfo, info, id);
+        }).catch(() => { metaRow.remove(); });
         songs.forEach((s, i) => {
             const el = document.createElement('div');
             el.className = 'list-item flex items-center gap-3 px-3 py-2 rounded cursor-pointer text-sm group';
