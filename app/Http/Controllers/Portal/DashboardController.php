@@ -263,7 +263,7 @@ class DashboardController extends Controller
         DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
             $wallet = Wallet::lockForUpdate()->find($wallet->id);
             $wallet->decrement('balance', $total);
-            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'subscription', 'amount' => -$total, 'description' => $description]);
+            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'payment', 'amount' => -$total, 'description' => $description]);
 
             $days = $plan->period_days * $months;
             $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
