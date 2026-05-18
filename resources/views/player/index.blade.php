@@ -675,8 +675,10 @@ let pickerTargetSongId = null;
 let pickerTargetSongTitle = null;
 
 async function portalApi(method, url, body = null) {
-    const opts = { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } };
-    if (body) opts.body = JSON.stringify(body);
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || CSRF;
+    const payload = method !== 'GET' ? { ...(body || {}), _token: token } : null;
+    const opts = { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' } };
+    if (payload) opts.body = JSON.stringify(payload);
     const r = await fetch(url, opts);
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Erreur ${r.status}`); }
     return r.json();
