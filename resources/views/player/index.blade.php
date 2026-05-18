@@ -171,9 +171,8 @@
 </div>
 
 {{-- Portal overlay (iframe) — audio keeps playing --}}
-<div id="portalOverlay" class="hidden fixed inset-0 z-[200]" style="background:#0f172a">
+<div id="portalOverlay" class="hidden fixed inset-x-0 top-0 z-[200]" style="bottom:80px; background:#0f172a">
     <iframe id="portalFrame" src="" class="w-full h-full border-0"></iframe>
-    {{-- Floating close button over the iframe --}}
     <button onclick="closePortalOverlay()"
         class="fixed top-3 right-4 z-[201] px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-indigo-400 hover:text-indigo-300 rounded-full text-xs shadow-lg transition">
         ✕ Retour au lecteur
