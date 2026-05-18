@@ -459,7 +459,7 @@ class NavidromeService
     public function addSongsToPlaylist(string $username, string $password, string $playlistId, array $songIds): void
     {
         if (empty($songIds)) return;
-        $repeated = array_map(fn($id) => ['songId', $id], $songIds);
+        $repeated = array_map(fn($id) => ['songIdToAdd', $id], $songIds);
         $url = $this->subsonicUrlAsUser($username, $password, 'updatePlaylist.view', ['playlistId' => $playlistId], $repeated);
         $response = retry(3, fn() => Http::timeout(10)->get($url),
             fn(int $a) => $a * 1000, fn($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
