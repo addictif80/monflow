@@ -46,6 +46,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/portal/plans', [DashboardController::class, 'plans']);
     Route::get('/portal/subscribe/{plan}', [DashboardController::class, 'subscribe']);
     Route::post('/portal/resume-payment', [DashboardController::class, 'resumePayment']);
+    Route::get('/portal/cancel-subscription', [DashboardController::class, 'cancelSubscriptionConfirm']);
     Route::post('/portal/cancel-subscription', [DashboardController::class, 'cancelSubscription']);
     Route::get('/portal/wallet', [DashboardController::class, 'wallet']);
     Route::post('/portal/wallet/topup', [DashboardController::class, 'walletTopup']);
@@ -84,6 +85,12 @@ Route::middleware('auth')->group(function () {
 
     // Invoice PDF
     Route::get('/portal/payments/{id}/invoice', [DashboardController::class, 'invoice']);
+
+    // GDPR data export
+    Route::get('/portal/export-data', [DashboardController::class, 'exportData']);
+
+    // Account deletion
+    Route::match(['get', 'post'], '/portal/delete-account', [DashboardController::class, 'deleteAccount']);
 
     // Web player — réservé aux abonnés actifs (et admins)
     Route::get('/player', function () {
