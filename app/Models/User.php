@@ -14,7 +14,7 @@ class User extends Authenticatable
         'username', 'email', 'password', 'encrypted_password',
         'first_name', 'last_name', 'phone', 'status',
         'is_admin', 'newsletter_optin', 'navidrome_id', 'stripe_customer_id',
-        'email_verified_at',
+        'email_verified_at', 'display_name', 'avatar_path',
     ];
 
     protected $hidden = ['password', 'remember_token', 'encrypted_password'];

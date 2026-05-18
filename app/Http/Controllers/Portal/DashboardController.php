@@ -349,6 +349,59 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function updateDisplayName(Request $request)
+    {
+        $user = Auth::user();
+        $name = trim($request->input('display_name', ''));
+
+        $request->validate([
+            'display_name' => ['required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9_\-\.]+$/'],
+        ], [
+            'display_name.regex' => 'Le pseudo ne peut contenir que des lettres, chiffres, _, - et .',
+        ]);
+
+        $exists = \App\Models\User::where('display_name', $name)
+            ->where('id', '!=', $user->id)->exists();
+
+        if ($exists) {
+            $base = substr($name, 0, 44);
+            $suggestions = [];
+            $tries = 0;
+            while (count($suggestions) < 4 && $tries < 20) {
+                $candidate = $base . str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                if (!\App\Models\User::where('display_name', $candidate)->exists()) {
+                    $suggestions[] = $candidate;
+                }
+                $tries++;
+            }
+            return back()->withErrors(['display_name' => 'Ce pseudo est déjà pris.'])
+                ->with('display_name_suggestions', $suggestions)
+                ->withInput();
+        }
+
+        $user->display_name = $name;
+        $user->save();
+
+        return back()->with('success', 'Pseudo mis à jour.');
+    }
+
+    public function updateAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => ['required', 'image', 'max:2048', 'mimes:jpeg,png,gif,webp'],
+        ]);
+
+        $user = Auth::user();
+        $file = $request->file('avatar');
+        $filename = $user->id . '.' . $file->getClientOriginalExtension();
+        $file->storeAs('public/avatars', $filename);
+
+        $user->avatar_path = 'avatars/' . $filename;
+        $user->save();
+
+        return back()->with('success', 'Photo de profil mise à jour.');
+    }
+
     public function deleteAccount(Request $request, NavidromeService $nd, StripeService $stripe, EmailService $mail)
     {
         $user = Auth::user();
