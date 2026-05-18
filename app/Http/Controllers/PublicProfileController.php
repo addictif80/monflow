@@ -10,6 +10,18 @@ use Illuminate\Support\Facades\Auth;
 
 class PublicProfileController extends Controller
 {
+    public function playlistTracks(string $sharedId, NavidromeService $nd)
+    {
+        $shared = SharedPlaylist::with('owner')->findOrFail($sharedId);
+        if (!$shared->is_public) abort(403);
+
+        $ownerPw = $shared->owner->getDecryptedPassword();
+        if (!$ownerPw) return response()->json([]);
+
+        $playlist = $nd->getPlaylist($shared->owner->username, $ownerPw, $shared->owner_nd_playlist_id);
+        return response()->json($playlist['entry'] ?? []);
+    }
+
     public function show(string $displayName, NavidromeService $nd)
     {
         $user = User::where('display_name', $displayName)->firstOrFail();

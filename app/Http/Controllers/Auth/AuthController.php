@@ -35,7 +35,9 @@ class AuthController extends Controller
         }
 
         Auth::login($user, $request->boolean('remember'));
-        return redirect($user->is_admin ? '/admin' : '/portal');
+        if ($user->is_admin) return redirect('/admin');
+        if ($user->activeSubscription) return redirect('/player');
+        return redirect('/portal');
     }
 
     public function showRegister() { return view('auth.register'); }

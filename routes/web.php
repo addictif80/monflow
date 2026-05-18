@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 
 // ─── Public profiles ───
 Route::get('/u/{displayName}', [\App\Http\Controllers\PublicProfileController::class, 'show'])->name('public.profile');
+Route::get('/public/playlists/{sharedId}/tracks', [\App\Http\Controllers\PublicProfileController::class, 'playlistTracks']);
 
 // ─── Public ───
 Route::get('/', function () {

@@ -56,7 +56,7 @@
         <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-4">Top titres</h2>
         <div class="space-y-2">
             @foreach($topSongs as $i => $song)
-            <div class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-4">
+            <div class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-4 group">
                 <span class="text-2xl font-bold text-gray-600 w-6 flex-shrink-0">{{ $i + 1 }}</span>
                 <div class="flex-1 min-w-0">
                     <div class="font-medium text-sm truncate">{{ $song['title'] ?? '—' }}</div>
@@ -67,6 +67,14 @@
                 <div class="text-xs text-gray-500 flex-shrink-0">
                     {{ $song['playCount'] ?? 0 }} écoute{{ ($song['playCount'] ?? 0) > 1 ? 's' : '' }}
                 </div>
+                @auth
+                @if(Auth::user()->activeSubscription || Auth::user()->is_admin)
+                <a href="/player?play_id={{ $song['id'] }}"
+                   class="opacity-0 group-hover:opacity-100 flex-shrink-0 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs transition">
+                    ▶ Lire
+                </a>
+                @endif
+                @endauth
             </div>
             @endforeach
         </div>
@@ -80,16 +88,19 @@
         <div class="space-y-2">
             @foreach($playlists as $pl)
             @php $sharedId = $pl['shared_playlist_id'] ?? null; @endphp
-            <div class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
-                <div class="min-w-0">
-                    <div class="font-medium text-sm truncate">{{ $pl['name'] }}</div>
-                    <div class="text-xs text-gray-500 mt-0.5">
-                        {{ $pl['songCount'] ?? 0 }} titre{{ ($pl['songCount'] ?? 0) > 1 ? 's' : '' }}
-                        @if(($pl['subscriber_count'] ?? 0) > 0)
-                            · {{ $pl['subscriber_count'] }} abonné{{ $pl['subscriber_count'] > 1 ? 's' : '' }}
-                        @endif
+            <div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                <div class="px-4 py-3 flex items-center justify-between gap-4 cursor-pointer hover:bg-gray-700/50 transition"
+                     onclick="togglePlaylist('{{ $sharedId }}', this)">
+                    <div class="min-w-0 flex-1">
+                        <div class="font-medium text-sm truncate">{{ $pl['name'] }}</div>
+                        <div class="text-xs text-gray-500 mt-0.5">
+                            {{ $pl['songCount'] ?? 0 }} titre{{ ($pl['songCount'] ?? 0) > 1 ? 's' : '' }}
+                            @if(($pl['subscriber_count'] ?? 0) > 0)
+                                · {{ $pl['subscriber_count'] }} abonné{{ $pl['subscriber_count'] > 1 ? 's' : '' }}
+                            @endif
+                        </div>
                     </div>
-                </div>
+                    <span class="text-gray-500 text-xs flex-shrink-0 mr-2">▼</span>
                 @if($sharedId)
                     @auth
                         @if(Auth::id() !== $user->id)
@@ -115,7 +126,10 @@
                     </a>
                     @endauth
                 @endif
-            </div>
+                </div>{{-- end header row --}}
+                <div class="playlist-tracks hidden border-t border-gray-700 divide-y divide-gray-700/50"
+                     data-shared-id="{{ $sharedId }}"></div>
+            </div>{{-- end card --}}
             @endforeach
         </div>
     </div>
@@ -127,5 +141,58 @@
 
 </div>
 <footer class="text-center text-gray-600 text-xs py-8">MonFlow &copy; {{ date('Y') }}</footer>
+
+<script>
+@auth
+const canPlay = {{ (Auth::user()->activeSubscription || Auth::user()->is_admin) ? 'true' : 'false' }};
+@else
+const canPlay = false;
+@endauth
+
+async function togglePlaylist(sharedId, headerEl) {
+    if (!sharedId) return;
+    const card    = headerEl.closest('.overflow-hidden');
+    const panel   = card.querySelector('.playlist-tracks');
+    const chevron = headerEl.querySelector('span');
+    const isOpen  = !panel.classList.contains('hidden');
+
+    if (isOpen) {
+        panel.classList.add('hidden');
+        chevron.textContent = '▼';
+        return;
+    }
+
+    chevron.textContent = '▲';
+    panel.classList.remove('hidden');
+
+    if (panel.dataset.loaded) return;
+    panel.dataset.loaded = '1';
+    panel.innerHTML = '<div class="px-4 py-3 text-xs text-gray-500">Chargement…</div>';
+
+    try {
+        const tracks = await fetch(`/public/playlists/${sharedId}/tracks`).then(r => r.json());
+        if (!tracks.length) { panel.innerHTML = '<div class="px-4 py-3 text-xs text-gray-500">Playlist vide.</div>'; return; }
+        panel.innerHTML = '';
+        tracks.forEach((t, i) => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-3 px-4 py-2 hover:bg-gray-700/40 transition group';
+            row.innerHTML = `
+                <span class="w-5 text-xs text-gray-500 flex-shrink-0">${i+1}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm truncate">${escHtml(t.title || '—')}</div>
+                    <div class="text-xs text-gray-400 truncate">${escHtml(t.artist || '')}${t.album ? ' · ' + escHtml(t.album) : ''}</div>
+                </div>
+                ${canPlay ? `<a href="/player?play_id=${t.id}" class="opacity-0 group-hover:opacity-100 flex-shrink-0 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs transition">▶</a>` : ''}`;
+            panel.appendChild(row);
+        });
+    } catch(e) {
+        panel.innerHTML = '<div class="px-4 py-3 text-xs text-red-400">Impossible de charger les titres.</div>';
+    }
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 </body>
 </html>
