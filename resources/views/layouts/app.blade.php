@@ -77,6 +77,9 @@
 
 <script>
 (function() {
+    // Don't run inside the player's iframe overlay — the main player handles audio
+    if (window !== window.top) return;
+
     const mp = document.getElementById('miniPlayer');
     const mpAudio = document.getElementById('mpAudio');
 
