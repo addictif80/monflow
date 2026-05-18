@@ -21,7 +21,7 @@
 <title>Lecteur — MonFlow</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-    body { background: #0f172a; color: #e2e8f0; }
+    body { background: #0f172a; color: #e2e8f0; height: 100vh; height: 100dvh; }
     .card { background: #1e293b; border: 1px solid #334155; }
     .list-item:hover { background: #334155; }
     .active-track { background: #4338ca !important; }
@@ -36,11 +36,14 @@
         #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.6); }
         #sidebarBackdrop { display: none; }
         #sidebarBackdrop.open { display: block; }
-        #searchInput { width: 140px !important; }
+        #searchInput { width: 120px !important; }
     }
+    /* Bannière d'installation PWA */
+    #pwaInstallBanner { display: none; }
+    #pwaInstallBanner.visible { display: flex; }
 </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
+<body class="flex flex-col overflow-hidden" style="height:100vh;height:100dvh">
 
 <header class="card border-b flex items-center justify-between px-4 h-14 shrink-0 gap-2">
     <div class="flex items-center gap-3">
@@ -54,7 +57,20 @@
         <button id="searchBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm whitespace-nowrap">🔍</button>
     </div>
     <div class="hidden sm:block text-sm text-slate-400 whitespace-nowrap">{{ Auth::user()->username }}</div>
+    {{-- Bouton install PWA (visible seulement quand beforeinstallprompt dispo) --}}
+    <button id="pwaInstallBtn" class="hidden flex-shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded font-medium transition whitespace-nowrap">
+        ⬇ Installer
+    </button>
 </header>
+
+{{-- Bannière install PWA pour les navigateurs sans beforeinstallprompt (Samsung Browser, etc.) --}}
+<div id="pwaInstallBanner" class="items-center justify-between gap-3 px-4 py-2 bg-indigo-900/80 border-b border-indigo-700 text-xs">
+    <span class="text-indigo-200">Installez MonFlow sur votre écran d'accueil pour une expérience plein écran.</span>
+    <div class="flex items-center gap-2 flex-shrink-0">
+        <button id="pwaInstallBannerBtn" class="px-3 py-1 bg-indigo-500 hover:bg-indigo-400 text-white rounded font-medium transition">Installer</button>
+        <button id="pwaInstallBannerDismiss" class="text-indigo-400 hover:text-white px-1">&times;</button>
+    </div>
+</div>
 
 {{-- Mobile: backdrop quand sidebar ouverte --}}
 <div id="sidebarBackdrop" class="fixed inset-0 bg-black/50 z-[299] sm:hidden" onclick="closeSidebar()"></div>
@@ -1175,6 +1191,45 @@ audio.addEventListener('play',  saveStateToStorage);
     // Clean URL without reloading
     history.replaceState({}, '', '/player');
 })();
+
+// ─── PWA Install prompt ───
+let deferredInstallPrompt = null;
+const pwaInstallBtn    = document.getElementById('pwaInstallBtn');
+const pwaInstallBanner = document.getElementById('pwaInstallBanner');
+
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    // Afficher le bouton dans le header
+    pwaInstallBtn.classList.remove('hidden');
+    pwaInstallBtn.classList.add('flex');
+    // Afficher la bannière si pas encore rejetée
+    if (!sessionStorage.getItem('pwa_banner_dismissed')) {
+        pwaInstallBanner.classList.add('visible');
+    }
+});
+
+async function triggerInstall() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    pwaInstallBtn.classList.add('hidden');
+    pwaInstallBanner.classList.remove('visible');
+}
+
+pwaInstallBtn.addEventListener('click', triggerInstall);
+document.getElementById('pwaInstallBannerBtn').addEventListener('click', triggerInstall);
+document.getElementById('pwaInstallBannerDismiss').addEventListener('click', () => {
+    pwaInstallBanner.classList.remove('visible');
+    sessionStorage.setItem('pwa_banner_dismissed', '1');
+});
+
+// Masquer si déjà installée
+window.addEventListener('appinstalled', () => {
+    pwaInstallBtn.classList.add('hidden');
+    pwaInstallBanner.classList.remove('visible');
+});
 
 // ─── Sidebar mobile ───
 function openSidebar() {
