@@ -1,14 +1,75 @@
 *, *::before, *::after { box-sizing: border-box; }
 body { -webkit-font-smoothing: antialiased; }
 /* Scrollbar */
-* { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(99,102,241,.25) transparent; }
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: rgba(99,102,241,.3); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,.5); }
 /* Focus ring */
 :focus-visible { outline: 2px solid rgba(99,102,241,.6); outline-offset: 2px; }
 /* Remove default number input arrows */
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 input[type=range] { accent-color: #6366f1; }
 /* Transitions on interactive elements */
-a, button { transition: color .15s, background-color .15s, border-color .15s, opacity .15s; }
+a, button { transition: color .15s, background-color .15s, border-color .15s, box-shadow .15s, opacity .15s; }
+
+/* ─── Premium visual theme ─────────────────────────────────────────────────── */
+
+/* Deep indigo-black base — overrides bg-zinc-950 on body */
+body.bg-zinc-950 {
+    background-color: #070810;
+    background-image:
+        radial-gradient(ellipse 130% 80% at -10% -5%, rgba(99,102,241,.14) 0%, transparent 55%),
+        radial-gradient(ellipse 80% 60% at 110% 110%, rgba(139,92,246,.09) 0%, transparent 55%);
+    background-attachment: fixed;
+}
+
+/* bg-zinc-950 standalone (nav, sidebar fills) */
+.bg-zinc-950 { background-color: #070810 !important; }
+
+/* Glass cards — semi-transparent over the gradient body */
+.bg-zinc-900 {
+    background: rgba(9,9,20,.72) !important;
+}
+
+/* Upgrade borders to subtle white translucency */
+.border-zinc-800 { border-color: rgba(255,255,255,.08) !important; }
+.border-zinc-700 { border-color: rgba(255,255,255,.11) !important; }
+.border-zinc-800\/60 { border-color: rgba(255,255,255,.06) !important; }
+
+/* Dividers */
+.divide-zinc-800\/50 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255,255,255,.05) !important; }
+.divide-zinc-800 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255,255,255,.07) !important; }
+
+/* ─── Gradient primary button ─── */
+.bg-indigo-600 {
+    background-image: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    box-shadow: 0 2px 14px rgba(99,102,241,.3);
+}
+.bg-indigo-600:hover,
+.hover\:bg-indigo-500:hover {
+    background-image: linear-gradient(135deg, #818cf8 0%, #8b5cf6 100%) !important;
+    box-shadow: 0 4px 24px rgba(99,102,241,.45) !important;
+}
+
+/* ─── Gradient text utility ─── */
+.text-gradient {
+    background: linear-gradient(135deg, #818cf8 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ─── Card hover accent ─── */
+a.bg-zinc-900:hover, button.bg-zinc-900:hover {
+    border-color: rgba(99,102,241,.22) !important;
+    box-shadow: 0 0 28px rgba(99,102,241,.07);
+}
+
+/* ─── Input glass ─── */
+input[type=text], input[type=email], input[type=password],
+input[type=search], input[type=number], input[type=tel],
+textarea, select {
+    background: rgba(9,9,20,.65) !important;
+}

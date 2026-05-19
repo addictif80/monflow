@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<meta name="theme-color" content="#09090b">
+<meta name="theme-color" content="#070810">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,52 +19,76 @@
 <title>Lecteur — MonFlow</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-    :root { --c-bg:#09090b; --c-surface:#18181b; --c-border:#27272a; --c-muted:#71717a; }
-    body { background:var(--c-bg); color:#f4f4f5; }
-    .card { background:var(--c-surface); border:1px solid var(--c-border); }
-    .list-item:hover { background:var(--c-border); }
-    .active-track { background:#4338ca !important; color:#fff; }
+    :root {
+        --c-bg: #070810;
+        --c-surface: rgba(9,9,20,.72);
+        --c-border: rgba(255,255,255,.08);
+        --c-muted: #71717a;
+        --c-accent: #6366f1;
+        --c-accent2: #7c3aed;
+    }
+    body {
+        background: var(--c-bg);
+        background-image:
+            radial-gradient(ellipse 120% 70% at -5% -5%, rgba(99,102,241,.18) 0%, transparent 55%),
+            radial-gradient(ellipse 80% 55% at 110% 105%, rgba(139,92,246,.12) 0%, transparent 55%);
+        color: #f4f4f5;
+    }
+    .card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+    }
+    .list-item:hover { background: rgba(255,255,255,.05); }
+    .active-track { background: rgba(99,102,241,.3) !important; color: #c7d2fe; border-left: 2px solid #818cf8; }
     ::-webkit-scrollbar { width:4px; height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
-    ::-webkit-scrollbar-thumb { background:var(--c-border); border-radius:2px; }
-    * { scrollbar-width:thin; scrollbar-color:var(--c-border) transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(99,102,241,.3); border-radius:2px; }
+    * { scrollbar-width:thin; scrollbar-color:rgba(99,102,241,.25) transparent; }
     #sidebar { transition:transform 0.25s cubic-bezier(0.4,0,0.2,1); }
     @media (max-width:639px) {
-        #sidebar { position:fixed; top:0; left:0; bottom:0; z-index:300; transform:translateX(-100%); width:272px; background:var(--c-bg); border-right:1px solid var(--c-border); }
-        #sidebar.open { transform:translateX(0); box-shadow:8px 0 40px rgba(0,0,0,.7); }
+        #sidebar { position:fixed; top:0; left:0; bottom:0; z-index:300; transform:translateX(-100%); width:272px; background:rgba(7,8,16,.95); border-right:1px solid var(--c-border); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); }
+        #sidebar.open { transform:translateX(0); box-shadow:8px 0 48px rgba(0,0,0,.8), 0 0 80px rgba(99,102,241,.06); }
         #sidebarBackdrop { display:none; }
         #sidebarBackdrop.open { display:block; }
     }
     #pwaInstallBanner { display:none; }
     #pwaInstallBanner.visible { display:flex; }
     /* Range inputs */
-    input[type=range] { -webkit-appearance:none; appearance:none; height:3px; background:rgba(255,255,255,.15); border-radius:2px; outline:none; cursor:pointer; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:#fff; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:3px; background:rgba(255,255,255,.12); border-radius:2px; outline:none; cursor:pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:#fff; box-shadow:0 0 8px rgba(255,255,255,.4); }
     input[type=range]::-moz-range-thumb { width:13px; height:13px; border-radius:50%; background:#fff; border:none; }
-    #npProgress { height:4px; background:rgba(255,255,255,.2); }
-    #npProgress::-webkit-slider-thumb { width:20px; height:20px; }
+    #npProgress { height:4px; background:rgba(255,255,255,.18); }
+    #npProgress::-webkit-slider-thumb { width:20px; height:20px; box-shadow:0 0 12px rgba(255,255,255,.5); }
     #npProgress::-moz-range-thumb { width:20px; height:20px; }
-    /* Now Playing */
-    #nowPlayingScreen { background:var(--c-bg); }
-    /* Tab bar active state */
+    /* Now Playing screen */
+    #nowPlayingScreen { background: var(--c-bg); }
+    /* Gradient button */
+    .btn-gradient { background: linear-gradient(135deg, var(--c-accent), var(--c-accent2)); box-shadow: 0 4px 20px rgba(99,102,241,.35); }
+    /* Tab bar active */
     .tabBtn.active svg, .tabBtn.active span { color:#818cf8; }
+    /* Brand gradient text */
+    .text-gradient { background:linear-gradient(135deg,#818cf8,#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    /* Header glow on logo */
+    .logo-glow { filter: drop-shadow(0 0 8px rgba(99,102,241,.5)); }
 </style>
 </head>
 <body class="flex flex-col overflow-hidden" style="height:100vh;height:100dvh">
 
 {{-- ─── Header ─── --}}
-<header class="card border-b flex items-center gap-3 px-4 h-14 shrink-0">
+<header class="border-b flex items-center gap-3 px-4 h-14 shrink-0" style="background:rgba(7,8,16,.8);border-color:rgba(255,255,255,.06);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)">
     <div class="flex items-center gap-2.5 shrink-0">
-        <button id="sidebarToggle" class="sm:hidden w-9 h-9 flex items-center justify-center text-zinc-400 rounded-lg active:bg-zinc-800">
+        <button id="sidebarToggle" class="sm:hidden w-9 h-9 flex items-center justify-center text-zinc-400 rounded-lg active:bg-white/10">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <button onclick="openPortalOverlay()" class="hidden sm:inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 transition">
+        <button onclick="openPortalOverlay()" class="hidden sm:inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Mon compte
         </button>
         <div class="flex items-center gap-2">
-            <img src="/icons/icon-192.png" alt="MonFlow" class="w-6 h-6 rounded-lg">
-            <span class="font-semibold text-zinc-100 hidden sm:inline">MonFlow</span>
+            <img src="/icons/icon-192.png" alt="MonFlow" class="w-6 h-6 rounded-lg logo-glow">
+            <span class="font-bold text-gradient hidden sm:inline">MonFlow</span>
         </div>
     </div>
     <div class="flex items-center gap-2 flex-1 max-w-2xl mx-auto">
@@ -145,9 +169,9 @@
 
 {{-- ─── Bottom: player bar + mobile tab bar ─── --}}
 <div class="shrink-0">
-    <div class="border-t border-zinc-800/60 bg-zinc-950/95 backdrop-blur-sm">
+    <div class="border-t" style="background:rgba(7,8,16,.85);border-color:rgba(255,255,255,.07);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)">
         {{-- Mobile: mini player (tappable → opens Now Playing) --}}
-        <div id="mobileBar" class="sm:hidden flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none active:bg-zinc-800/30 transition">
+        <div id="mobileBar" class="sm:hidden flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none active:bg-white/5 transition">
             <div id="mbCoverArt" class="w-11 h-11 bg-zinc-800 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
                 <svg class="w-5 h-5 text-zinc-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
             </div>
@@ -213,7 +237,7 @@
     </div>
 
     {{-- Mobile tab bar --}}
-    <nav class="sm:hidden flex bg-zinc-950 border-t border-zinc-800/60" style="padding-bottom:env(safe-area-inset-bottom,0)">
+    <nav class="sm:hidden flex border-t" style="background:rgba(7,8,16,.9);border-color:rgba(255,255,255,.06);padding-bottom:env(safe-area-inset-bottom,0)">
         <button data-tab="home" class="tabBtn flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-zinc-500 active transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline stroke-linecap="round" stroke-linejoin="round" points="9 22 9 12 15 12 15 22"/></svg>
             <span class="text-[10px] font-medium">Accueil</span>
@@ -239,8 +263,8 @@
 
     {{-- Ambient blurred background --}}
     <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <img id="npBgImg" src="" alt="" class="absolute inset-0 w-full h-full object-cover" style="transform:scale(1.15);filter:blur(60px) saturate(2) brightness(0.18)">
-        <div class="absolute inset-0 bg-zinc-950/65"></div>
+        <img id="npBgImg" src="" alt="" class="absolute inset-0 w-full h-full object-cover" style="transform:scale(1.2);filter:blur(55px) saturate(2.8) brightness(0.28)">
+        <div class="absolute inset-0" style="background:linear-gradient(to bottom,rgba(7,8,16,.45) 0%,rgba(7,8,16,.3) 40%,rgba(7,8,16,.65) 75%,rgba(7,8,16,.9) 100%)"></div>
     </div>
 
     {{-- Content --}}

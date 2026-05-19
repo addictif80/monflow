@@ -13,32 +13,39 @@
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col">
 
-<nav class="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-40">
+<nav class="border-b border-white/[0.06] bg-zinc-950/70 backdrop-blur-xl sticky top-0 z-40" style="box-shadow:0 1px 0 rgba(99,102,241,.08)">
     <div class="max-w-6xl mx-auto px-4 flex items-center h-12 gap-1">
-        <a href="/portal" class="flex items-center gap-2 mr-3 flex-shrink-0">
-            <img src="/icons/icon-192.png" alt="MonFlow" class="w-5 h-5 rounded">
-            <span class="text-sm font-semibold text-zinc-100">MonFlow</span>
+        <a href="/portal" class="flex items-center gap-2 mr-3 flex-shrink-0 group">
+            <div class="relative">
+                <img src="/icons/icon-192.png" alt="MonFlow" class="w-5 h-5 rounded-md">
+                <div class="absolute inset-0 rounded-md opacity-0 group-hover:opacity-100 transition" style="box-shadow:0 0 10px rgba(99,102,241,.6)"></div>
+            </div>
+            <span class="text-sm font-semibold text-gradient">MonFlow</span>
         </a>
+        @php
+            $navPath = request()->path();
+            $navActive = fn($path) => ($navPath === $path || str_starts_with($navPath, $path.'/')) ? 'text-indigo-300' : 'text-zinc-500 hover:text-zinc-200';
+        @endphp
         <div class="flex items-center gap-0.5 flex-1 overflow-x-auto">
-            <a href="/portal" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Tableau de bord</a>
-            <a href="/portal/plans" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Formules</a>
-            <a href="/portal/wallet" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Portefeuille</a>
-            <a href="/portal/payments" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Paiements</a>
-            <a href="/portal/devices" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Appareils</a>
-            <a href="/portal/playlists" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Playlists</a>
-            <a href="/support/tickets" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Support</a>
-            <a href="/portal/feedback" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Feedback</a>
-            <a href="/player" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Lecteur</a>
-            <a href="/portal/deemix" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md whitespace-nowrap">Deemix</a>
+            <a href="/portal" class="text-sm {{ $navActive('portal') !== 'text-zinc-500 hover:text-zinc-200' && $navPath === 'portal' ? 'text-indigo-300' : 'text-zinc-500 hover:text-zinc-200' }} px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Tableau de bord</a>
+            <a href="/portal/plans" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/plans*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Formules</a>
+            <a href="/portal/wallet" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/wallet*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Portefeuille</a>
+            <a href="/portal/payments" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/payments*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Paiements</a>
+            <a href="/portal/devices" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/devices*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Appareils</a>
+            <a href="/portal/playlists" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/playlists*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Playlists</a>
+            <a href="/support/tickets" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('support/tickets*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Support</a>
+            <a href="/portal/feedback" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/feedback*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Feedback</a>
+            <a href="/player" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap text-zinc-500 hover:text-zinc-200">Lecteur</a>
+            <a href="/portal/deemix" class="text-sm px-2.5 py-1.5 rounded-lg whitespace-nowrap {{ request()->is('portal/deemix*') ? 'text-indigo-300 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-200' }}">Deemix</a>
         </div>
         <div class="flex items-center gap-1 flex-shrink-0">
             @php $unreadCount = \App\Models\Notification::where('user_id', Auth::id())->whereNull('read_at')->count(); @endphp
-            <a href="/portal/notifications" class="relative p-2 text-zinc-500 hover:text-zinc-200 rounded-md">
+            <a href="/portal/notifications" class="relative p-2 text-zinc-500 hover:text-zinc-200 rounded-lg hover:bg-white/5 transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                @if($unreadCount > 0)<span class="absolute top-1 right-1 w-2 h-2 bg-indigo-500 rounded-full"></span>@endif
+                @if($unreadCount > 0)<span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-indigo-400 rounded-full" style="box-shadow:0 0 6px rgba(99,102,241,.8)"></span>@endif
             </a>
-            <a href="/portal/profile" class="text-sm text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-md">{{ Auth::user()->username }}</a>
-            <form action="/logout" method="POST" class="inline">@csrf<button class="text-sm text-zinc-600 hover:text-zinc-400 px-2.5 py-1.5 rounded-md">Déconnexion</button></form>
+            <a href="/portal/profile" class="text-sm text-zinc-400 hover:text-zinc-100 px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition">{{ Auth::user()->username }}</a>
+            <form action="/logout" method="POST" class="inline">@csrf<button class="text-sm text-zinc-600 hover:text-zinc-400 px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition">Déconnexion</button></form>
         </div>
     </div>
 </nav>
