@@ -4,55 +4,58 @@
 
 @section('content')
 <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold">Utilisateurs</h1>
-    <a href="/admin/users/create" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition">+ Créer un utilisateur</a>
+    <div>
+        <h1 class="text-base font-semibold text-zinc-100">Utilisateurs</h1>
+        <p class="text-sm text-zinc-500 mt-0.5">Gestion des comptes utilisateurs</p>
+    </div>
+    <a href="/admin/users/create" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">+ Créer un utilisateur</a>
 </div>
 
 {{-- Search & Filter --}}
 <form method="GET" action="/admin/users" class="flex flex-wrap gap-3 mb-6">
     <input type="text" name="q" value="{{ request('q') }}" placeholder="Rechercher par nom, email..."
-           class="flex-1 min-w-[200px] px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
-    <select name="status" class="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
+           class="flex-1 min-w-[200px] bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2 outline-none transition">
+    <select name="status" class="bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 rounded-lg text-sm text-zinc-100 px-3 py-2 outline-none">
         <option value="">Tous les statuts</option>
         <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Actif</option>
         <option value="suspended" {{ request('status') === 'suspended' ? 'selected' : '' }}>Suspendu</option>
         <option value="deleted" {{ request('status') === 'deleted' ? 'selected' : '' }}>Supprimé</option>
     </select>
-    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition">Filtrer</button>
+    <button type="submit" class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition">Filtrer</button>
 </form>
 
 {{-- Users Table --}}
-<div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-        <table class="w-full text-sm border-collapse">
+        <table class="w-full text-sm">
             <thead>
-                <tr class="border-b border-gray-700 text-left text-gray-400">
-                    <th class="px-4 py-3">Nom d'utilisateur</th>
-                    <th class="px-4 py-3">Email</th>
-                    <th class="px-4 py-3">Statut</th>
-                    <th class="px-4 py-3">Créé le</th>
+                <tr class="border-b border-zinc-800">
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Nom d'utilisateur</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Email</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Statut</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Créé le</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-zinc-800/50">
                 @forelse($users as $user)
-                    <tr class="border-b border-gray-700/50 hover:bg-gray-700 cursor-pointer" onclick="window.location='/admin/users/{{ $user->id }}'">
+                    <tr class="hover:bg-zinc-800/30 transition cursor-pointer" onclick="window.location='/admin/users/{{ $user->id }}'">
                         <td class="px-4 py-3">
                             <a href="/admin/users/{{ $user->id }}" class="text-indigo-400 hover:text-indigo-300 font-medium">{{ $user->username }}</a>
                         </td>
-                        <td class="px-4 py-3 text-gray-300">{{ $user->email }}</td>
+                        <td class="px-4 py-3 text-zinc-400">{{ $user->email }}</td>
                         <td class="px-4 py-3">
                             @if($user->status === 'active')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-green-900/50 text-green-400 border border-green-700">active</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">active</span>
                             @elseif($user->status === 'suspended')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-red-900/50 text-red-400 border border-red-700">suspendu</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">suspendu</span>
                             @elseif($user->status === 'deleted')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400 border border-gray-600">supprimé</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">supprimé</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3 text-gray-400">{{ $user->created_at->format('d/m/Y H:i') }}</td>
+                        <td class="px-4 py-3 text-zinc-500">{{ $user->created_at->format('d/m/Y H:i') }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="px-4 py-6 text-center text-gray-500">Aucun utilisateur trouvé.</td></tr>
+                    <tr><td colspan="4" class="px-4 py-6 text-center text-zinc-600">Aucun utilisateur trouvé.</td></tr>
                 @endforelse
             </tbody>
         </table>

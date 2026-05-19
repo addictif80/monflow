@@ -5,40 +5,40 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <div>
-        <h1 class="text-2xl font-bold">Mes playlists</h1>
-        <p class="text-gray-400 text-sm mt-1">Synchronisées avec tous vos appareils Navidrome</p>
+        <h1 class="text-base font-semibold text-zinc-100">Mes playlists</h1>
+        <p class="text-sm text-zinc-500 mt-0.5">Synchronisées avec tous vos appareils Navidrome</p>
     </div>
     <button onclick="openCreateModal()"
-        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">
+        class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
         + Nouvelle playlist
     </button>
 </div>
 
-<div class="flex gap-6" style="min-height: 520px">
+<div class="flex gap-4" style="min-height: 520px">
     {{-- Left: playlist list --}}
-    <div class="w-72 shrink-0 space-y-2" id="playlistList">
+    <div class="w-64 shrink-0 space-y-1" id="playlistList">
         @forelse($playlists as $pl)
-            <div class="playlist-card bg-gray-800 border border-gray-700 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition"
+            <div class="playlist-card bg-zinc-900 border border-zinc-800 rounded-xl p-4 cursor-pointer hover:border-indigo-500/50 transition"
                  data-id="{{ $pl['id'] }}" onclick="loadPlaylist('{{ $pl['id'] }}', this)">
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
-                        <p class="font-medium truncate">{{ $pl['name'] }}</p>
-                        <p class="text-xs text-gray-500 mt-0.5">{{ $pl['songCount'] ?? 0 }} titre(s)</p>
+                        <p class="text-sm font-medium text-zinc-200 truncate">{{ $pl['name'] }}</p>
+                        <p class="text-xs text-zinc-600 mt-0.5">{{ $pl['songCount'] ?? 0 }} titre(s)</p>
                     </div>
                     <div class="flex gap-1 shrink-0">
                         <button onclick="event.stopPropagation(); openRenameModal('{{ $pl['id'] }}', {{ json_encode($pl['name']) }})"
-                            class="text-gray-500 hover:text-indigo-400 p-1 rounded" title="Renommer">
+                            class="text-zinc-600 hover:text-indigo-400 p-1 rounded" title="Renommer">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </button>
                         <button onclick="event.stopPropagation(); deletePlaylist('{{ $pl['id'] }}', {{ json_encode($pl['name']) }})"
-                            class="text-gray-500 hover:text-red-400 p-1 rounded" title="Supprimer">
+                            class="text-zinc-600 hover:text-red-400 p-1 rounded" title="Supprimer">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                         </button>
                     </div>
                 </div>
             </div>
         @empty
-            <div id="emptyState" class="bg-gray-800 border border-dashed border-gray-600 rounded-lg p-8 text-center text-gray-500">
+            <div id="emptyState" class="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl p-8 text-center text-zinc-600">
                 <p class="text-sm">Aucune playlist.</p>
                 <p class="text-xs mt-1">Créez-en une ou utilisez une app mobile.</p>
             </div>
@@ -46,64 +46,64 @@
     </div>
 
     {{-- Right: playlist detail --}}
-    <div class="flex-1 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden flex flex-col">
-        <div id="detailEmpty" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
+    <div class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
+        <div id="detailEmpty" class="flex-1 flex items-center justify-center text-zinc-700 text-sm">
             Sélectionnez une playlist
         </div>
 
         <div id="detailPanel" class="flex-1 flex flex-col" style="display:none!important">
             {{-- Header --}}
-            <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between gap-4 shrink-0">
+            <div class="px-5 py-4 border-b border-zinc-800 flex items-center justify-between gap-4 shrink-0">
                 <div>
-                    <h2 id="detailName" class="text-lg font-semibold"></h2>
-                    <p id="detailCount" class="text-xs text-gray-500 mt-0.5"></p>
+                    <h2 id="detailName" class="text-sm font-semibold text-zinc-100"></h2>
+                    <p id="detailCount" class="text-xs text-zinc-600 mt-0.5"></p>
                 </div>
                 <a id="playInPlayerBtn" href="/player" target="_blank"
-                   class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition">
+                   class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">
                     ▶ Ouvrir dans le lecteur
                 </a>
             </div>
 
             {{-- Search to add --}}
-            <div class="px-6 py-3 border-b border-gray-700 shrink-0">
+            <div class="px-5 py-3 border-b border-zinc-800 shrink-0">
                 <div class="flex gap-2">
                     <input id="songSearch" type="text" placeholder="Rechercher un titre à ajouter…"
-                        class="flex-1 px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        class="flex-1 bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2 outline-none transition">
                     <button onclick="searchSongs()"
-                        class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded text-sm transition">Rechercher</button>
+                        class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium px-3 py-2 rounded-lg border border-zinc-700 transition">Rechercher</button>
                 </div>
                 <div id="searchResults" class="mt-2 space-y-1 max-h-48 overflow-y-auto" style="display:none"></div>
             </div>
 
             {{-- Track list --}}
-            <div id="trackList" class="flex-1 overflow-y-auto divide-y divide-gray-700/50"></div>
+            <div id="trackList" class="flex-1 overflow-y-auto divide-y divide-zinc-800/50"></div>
         </div>
     </div>
 </div>
 
 {{-- Create modal --}}
-<div id="createModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
-    <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm shadow-xl">
-        <h3 class="text-lg font-semibold mb-4">Nouvelle playlist</h3>
+<div id="createModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" style="display:none">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h3 class="text-sm font-semibold text-zinc-100 mb-4">Nouvelle playlist</h3>
         <input id="createName" type="text" placeholder="Nom de la playlist" maxlength="200"
-            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
+            class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2 outline-none transition mb-4">
         <div class="flex gap-3 justify-end">
-            <button onclick="closeCreateModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">Annuler</button>
-            <button onclick="createPlaylist()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">Créer</button>
+            <button onclick="closeCreateModal()" class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition">Annuler</button>
+            <button onclick="createPlaylist()" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">Créer</button>
         </div>
     </div>
 </div>
 
 {{-- Rename modal --}}
-<div id="renameModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style="display:none">
-    <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm shadow-xl">
-        <h3 class="text-lg font-semibold mb-4">Renommer la playlist</h3>
+<div id="renameModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" style="display:none">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h3 class="text-sm font-semibold text-zinc-100 mb-4">Renommer la playlist</h3>
         <input id="renameName" type="text" maxlength="200"
-            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
+            class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2 outline-none transition mb-4">
         <input type="hidden" id="renameId">
         <div class="flex gap-3 justify-end">
-            <button onclick="closeRenameModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">Annuler</button>
-            <button onclick="renamePlaylist()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">Enregistrer</button>
+            <button onclick="closeRenameModal()" class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition">Annuler</button>
+            <button onclick="renamePlaylist()" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">Enregistrer</button>
         </div>
     </div>
 </div>
@@ -134,7 +134,7 @@ async function api(method, url, body = null) {
 
 function toast(msg, ok = true) {
     const el = document.createElement('div');
-    el.className = `fixed bottom-6 right-6 z-[9999] px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition ${ok ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`;
+    el.className = `fixed bottom-6 right-6 z-[9999] px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition ${ok ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/20' : 'bg-red-500/20 text-red-300 border border-red-500/20'}`;
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 3000);
@@ -151,12 +151,12 @@ function esc(s) {
 // ─── Load playlist detail ───
 async function loadPlaylist(id, cardEl) {
     document.querySelectorAll('.playlist-card').forEach(c => c.classList.remove('border-indigo-500', 'bg-gray-750'));
-    cardEl?.classList.add('border-indigo-500');
+    cardEl?.classList.add('border-indigo-500/50');
     currentPlaylistId = id;
     document.getElementById('detailEmpty').style.display = 'none';
     const panel = document.getElementById('detailPanel');
     panel.style.removeProperty('display');
-    document.getElementById('trackList').innerHTML = '<div class="p-6 text-gray-500 text-sm">Chargement…</div>';
+    document.getElementById('trackList').innerHTML = '<div class="p-6 text-zinc-600 text-sm">Chargement…</div>';
     document.getElementById('searchResults').style.display = 'none';
     document.getElementById('songSearch').value = '';
 
@@ -174,19 +174,19 @@ async function loadPlaylist(id, cardEl) {
 function renderTracks() {
     const list = document.getElementById('trackList');
     if (!currentSongs.length) {
-        list.innerHTML = '<div class="p-6 text-gray-500 text-sm text-center">Playlist vide. Ajoutez des titres via la recherche ci-dessus.</div>';
+        list.innerHTML = '<div class="p-6 text-zinc-600 text-sm text-center">Playlist vide. Ajoutez des titres via la recherche ci-dessus.</div>';
         return;
     }
     list.innerHTML = currentSongs.map((s, i) => `
-        <div class="flex items-center gap-3 px-5 py-2.5 hover:bg-gray-700/50 group text-sm">
-            <span class="w-6 text-gray-600 text-xs text-right shrink-0">${i+1}</span>
+        <div class="flex items-center gap-3 px-5 py-2.5 hover:bg-zinc-800/30 group text-sm">
+            <span class="w-6 text-zinc-700 text-xs text-right shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
-                <div class="truncate font-medium">${esc(s.title)}</div>
-                <div class="text-xs text-gray-500 truncate">${esc(s.artist||'')}${s.album ? ' · '+esc(s.album) : ''}</div>
+                <div class="truncate font-medium text-zinc-200">${esc(s.title)}</div>
+                <div class="text-xs text-zinc-600 truncate">${esc(s.artist||'')}${s.album ? ' · '+esc(s.album) : ''}</div>
             </div>
-            <span class="text-xs text-gray-600 shrink-0">${formatDuration(s.duration)}</span>
+            <span class="text-xs text-zinc-700 shrink-0">${formatDuration(s.duration)}</span>
             <button onclick="removeTrack(${i})"
-                class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 p-1 rounded transition shrink-0" title="Retirer">
+                class="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 p-1 rounded transition shrink-0" title="Retirer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>`).join('');
@@ -219,15 +219,15 @@ async function searchSongs() {
     const resultsEl = document.getElementById('searchResults');
     if (!q) { resultsEl.style.display = 'none'; return; }
     resultsEl.style.display = 'block';
-    resultsEl.innerHTML = '<div class="text-gray-500 text-xs py-1">Recherche…</div>';
+    resultsEl.innerHTML = '<div class="text-zinc-600 text-xs py-1">Recherche…</div>';
     try {
         const songs = await api('GET', `/portal/playlists/search?q=${encodeURIComponent(q)}`);
-        if (!songs.length) { resultsEl.innerHTML = '<div class="text-gray-500 text-xs py-1">Aucun résultat.</div>'; return; }
+        if (!songs.length) { resultsEl.innerHTML = '<div class="text-zinc-600 text-xs py-1">Aucun résultat.</div>'; return; }
         resultsEl.innerHTML = songs.map(s => `
-            <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700 text-xs">
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 text-xs">
                 <div class="flex-1 min-w-0">
-                    <span class="font-medium">${esc(s.title)}</span>
-                    <span class="text-gray-500 ml-1">${esc(s.artist||'')}${s.album?' · '+esc(s.album):''}</span>
+                    <span class="font-medium text-zinc-200">${esc(s.title)}</span>
+                    <span class="text-zinc-600 ml-1">${esc(s.artist||'')}${s.album?' · '+esc(s.album):''}</span>
                 </div>
                 <button onclick="addSong('${esc(s.id)}', '${esc(s.title)}')"
                     class="shrink-0 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs transition">
@@ -268,19 +268,19 @@ async function createPlaylist() {
         closeCreateModal();
         // Add card to list
         const card = document.createElement('div');
-        card.className = 'playlist-card bg-gray-800 border border-gray-700 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition';
+        card.className = 'playlist-card bg-zinc-900 border border-zinc-800 rounded-xl p-4 cursor-pointer hover:border-indigo-500/50 transition';
         card.dataset.id = pl.id;
         card.innerHTML = `
             <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
-                    <p class="font-medium truncate">${esc(pl.name)}</p>
-                    <p class="text-xs text-gray-500 mt-0.5" data-count="${pl.id}">0 titre(s)</p>
+                    <p class="text-sm font-medium text-zinc-200 truncate">${esc(pl.name)}</p>
+                    <p class="text-xs text-zinc-600 mt-0.5" data-count="${pl.id}">0 titre(s)</p>
                 </div>
                 <div class="flex gap-1 shrink-0">
-                    <button onclick="event.stopPropagation(); openRenameModal('${pl.id}', ${JSON.stringify(pl.name)})" class="text-gray-500 hover:text-indigo-400 p-1 rounded" title="Renommer">
+                    <button onclick="event.stopPropagation(); openRenameModal('${pl.id}', ${JSON.stringify(pl.name)})" class="text-zinc-600 hover:text-indigo-400 p-1 rounded" title="Renommer">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
-                    <button onclick="event.stopPropagation(); deletePlaylist('${pl.id}', ${JSON.stringify(pl.name)})" class="text-gray-500 hover:text-red-400 p-1 rounded" title="Supprimer">
+                    <button onclick="event.stopPropagation(); deletePlaylist('${pl.id}', ${JSON.stringify(pl.name)})" class="text-zinc-600 hover:text-red-400 p-1 rounded" title="Supprimer">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
                 </div>
@@ -332,14 +332,14 @@ async function deletePlaylist(id, name) {
         }
         if (!document.querySelectorAll('.playlist-card').length) {
             const list = document.getElementById('playlistList');
-            list.innerHTML = '<div id="emptyState" class="bg-gray-800 border border-dashed border-gray-600 rounded-lg p-8 text-center text-gray-500"><p class="text-sm">Aucune playlist.</p><p class="text-xs mt-1">Créez-en une ou utilisez une app mobile.</p></div>';
+            list.innerHTML = '<div id="emptyState" class="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl p-8 text-center text-zinc-600"><p class="text-sm">Aucune playlist.</p><p class="text-xs mt-1">Créez-en une ou utilisez une app mobile.</p></div>';
         }
         toast('Playlist supprimée.');
     } catch(e) { toast(e.message, false); }
 }
 
 function updateCardCount(id, count) {
-    const el = document.querySelector(`.playlist-card[data-id="${id}"] .text-gray-500`);
+    const el = document.querySelector(`.playlist-card[data-id="${id}"] .text-zinc-600`);
     if (el) el.textContent = `${count} titre(s)`;
 }
 

@@ -1,21 +1,21 @@
 @extends('layouts.app')
 
-@section('title', 'Offrir un abonnement - MonFlow')
+@section('title', 'Offrir un abonnement — MonFlow')
 
 @section('content')
-<div class="mb-8">
-    <h1 class="text-2xl font-bold">Offrir un abonnement</h1>
-    <p class="text-gray-400 mt-1">Faites plaisir à quelqu'un avec un abonnement MonFlow</p>
+<div class="mb-6">
+    <h1 class="text-base font-semibold text-zinc-100">Offrir un abonnement</h1>
+    <p class="text-sm text-zinc-500 mt-0.5">Faites plaisir à quelqu'un avec un abonnement MonFlow</p>
 </div>
 
-<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-lg">
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 max-w-lg">
     <form action="/portal/gift" method="POST" class="space-y-5">
         @csrf
 
         <div>
-            <label for="plan_id" class="block text-sm font-medium text-gray-300 mb-1">Formule</label>
+            <label for="plan_id" class="block text-xs font-medium text-zinc-400 mb-1.5">Formule</label>
             <select name="plan_id" id="plan_id" required
-                    class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 px-3 py-2 outline-none transition">
                 <option value="">-- Choisir une formule --</option>
                 @foreach($plans as $plan)
                     <option value="{{ $plan->id }}">{{ $plan->name }} - {{ number_format($plan->price, 2, ',', ' ') }} &euro;/{{ $plan->billing_cycle }}</option>
@@ -24,14 +24,14 @@
         </div>
 
         <div>
-            <label for="recipient_email" class="block text-sm font-medium text-gray-300 mb-1">Email du destinataire</label>
+            <label for="recipient_email" class="block text-xs font-medium text-zinc-400 mb-1.5">Email du destinataire</label>
             <input type="email" name="recipient_email" id="recipient_email" required placeholder="exemple@email.com"
                    value="{{ old('recipient_email') }}"
-                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                   class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2 outline-none transition">
         </div>
 
-        <div class="pt-4 border-t border-gray-700">
-            <button type="submit" class="w-full px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">
+        <div class="pt-4 border-t border-zinc-800">
+            <button type="submit" class="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
                 Offrir
             </button>
         </div>

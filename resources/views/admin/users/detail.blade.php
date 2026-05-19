@@ -4,43 +4,45 @@
 
 @section('content')
 <div class="mb-6">
-    <a href="/admin/users" class="text-gray-400 hover:text-gray-200 text-sm">&larr; Retour aux utilisateurs</a>
+    <a href="/admin/users" class="text-sm text-zinc-500 hover:text-zinc-300">&larr; Retour aux utilisateurs</a>
 </div>
 
 <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold">{{ $user->username }}</h1>
-    <div class="flex gap-2">
-        <a href="/admin/users/{{ $user->id }}/edit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition">Modifier</a>
+    <div>
+        <h1 class="text-base font-semibold text-zinc-100">{{ $user->username }}</h1>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        <a href="/admin/users/{{ $user->id }}/edit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">Modifier</a>
 
         @if(!$user->is_admin && $user->status !== 'deleted')
             <form method="POST" action="/admin/users/{{ $user->id }}/impersonate" onsubmit="return confirm('Se connecter en tant que {{ $user->username }} ?')">
                 @csrf
-                <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium transition">Impersonate</button>
+                <button type="submit" class="inline-flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-sm font-medium px-4 py-2 rounded-lg border border-amber-500/20 transition">Impersonate</button>
             </form>
         @endif
 
         @if($user->status === 'active')
             <form method="POST" action="/admin/users/{{ $user->id }}/suspend" onsubmit="return confirm('Suspendre cet utilisateur ?')">
                 @csrf
-                <button type="submit" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-medium transition">Suspendre</button>
+                <button type="submit" class="inline-flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-sm font-medium px-4 py-2 rounded-lg border border-yellow-500/20 transition">Suspendre</button>
             </form>
         @elseif($user->status === 'suspended')
             <form method="POST" action="/admin/users/{{ $user->id }}/reactivate">
                 @csrf
-                <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-medium transition">Réactiver</button>
+                <button type="submit" class="inline-flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium px-4 py-2 rounded-lg border border-emerald-500/20 transition">Réactiver</button>
             </form>
         @endif
 
         @if($user->status !== 'deleted')
             <form method="POST" action="/admin/users/{{ $user->id }}/delete" onsubmit="return confirm('Supprimer cet utilisateur ? Cette action est irréversible.')">
                 @csrf
-                <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium transition">Supprimer</button>
+                <button type="submit" class="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/15 text-red-400 text-sm font-medium px-4 py-2 rounded-lg border border-red-500/20 transition">Supprimer</button>
             </form>
         @else
             @if(!str_starts_with($user->email, 'released_'))
                 <form method="POST" action="/admin/users/{{ $user->id }}/release-email" onsubmit="return confirm('Libérer {{ $user->email }} ? Cette adresse pourra être réutilisée par un autre compte.')">
                     @csrf
-                    <button type="submit" class="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg text-sm font-medium transition">Libérer l'email</button>
+                    <button type="submit" class="inline-flex items-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-sm font-medium px-4 py-2 rounded-lg border border-orange-500/20 transition">Libérer l'email</button>
                 </form>
             @endif
         @endif
@@ -48,106 +50,108 @@
 </div>
 
 {{-- User Info Card --}}
-<div class="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-    <h2 class="text-lg font-semibold mb-4">Informations</h2>
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+    <h2 class="text-sm font-medium text-zinc-300 mb-4">Informations</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
         <div>
-            <span class="text-gray-400">Nom d'utilisateur</span>
-            <p class="font-medium">{{ $user->username }}</p>
+            <span class="text-xs text-zinc-500">Nom d'utilisateur</span>
+            <p class="font-medium text-zinc-200 mt-0.5">{{ $user->username }}</p>
         </div>
         <div>
-            <span class="text-gray-400">Email</span>
-            <p class="font-medium">{{ $user->email }}</p>
+            <span class="text-xs text-zinc-500">Email</span>
+            <p class="font-medium text-zinc-200 mt-0.5">{{ $user->email }}</p>
         </div>
         <div>
-            <span class="text-gray-400">Nom complet</span>
-            <p class="font-medium">{{ $user->full_name ?: '—' }}</p>
+            <span class="text-xs text-zinc-500">Nom complet</span>
+            <p class="font-medium text-zinc-200 mt-0.5">{{ $user->full_name ?: '—' }}</p>
         </div>
         <div>
-            <span class="text-gray-400">Statut</span>
-            <p class="mt-0.5">
+            <span class="text-xs text-zinc-500">Statut</span>
+            <p class="mt-1">
                 @if($user->status === 'active')
-                    <span class="px-2 py-0.5 text-xs rounded-full bg-green-900/50 text-green-400 border border-green-700">active</span>
+                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">active</span>
                 @elseif($user->status === 'suspended')
-                    <span class="px-2 py-0.5 text-xs rounded-full bg-red-900/50 text-red-400 border border-red-700">suspendu</span>
+                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">suspendu</span>
                 @elseif($user->status === 'deleted')
-                    <span class="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400 border border-gray-600">supprimé</span>
+                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">supprimé</span>
                 @endif
             </p>
         </div>
         <div>
-            <span class="text-gray-400">Navidrome ID</span>
-            <p class="font-medium font-mono text-xs">{{ $user->navidrome_id ?: '—' }}</p>
+            <span class="text-xs text-zinc-500">Navidrome ID</span>
+            <p class="font-medium font-mono text-xs text-zinc-400 mt-0.5">{{ $user->navidrome_id ?: '—' }}</p>
         </div>
         <div>
-            <span class="text-gray-400">Stripe Customer ID</span>
-            <p class="font-medium font-mono text-xs">{{ $user->stripe_customer_id ?: '—' }}</p>
+            <span class="text-xs text-zinc-500">Stripe Customer ID</span>
+            <p class="font-medium font-mono text-xs text-zinc-400 mt-0.5">{{ $user->stripe_customer_id ?: '—' }}</p>
         </div>
         <div>
-            <span class="text-gray-400">Créé le</span>
-            <p class="font-medium">{{ $user->created_at->format('d/m/Y H:i') }}</p>
+            <span class="text-xs text-zinc-500">Créé le</span>
+            <p class="font-medium text-zinc-200 mt-0.5">{{ $user->created_at->format('d/m/Y H:i') }}</p>
         </div>
     </div>
 </div>
 
 {{-- Wallet Section --}}
-<div class="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-    <h2 class="text-lg font-semibold mb-4">Portefeuille</h2>
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+    <h2 class="text-sm font-medium text-zinc-300 mb-4">Portefeuille</h2>
     <div class="flex items-center gap-6 mb-4">
         <div>
-            <span class="text-gray-400 text-sm">Solde actuel</span>
-            <p class="text-2xl font-bold text-green-400">{{ number_format($user->wallet_balance ?? 0, 2, ',', ' ') }} &euro;</p>
+            <span class="text-xs text-zinc-500">Solde actuel</span>
+            <p class="text-2xl font-semibold text-emerald-400 mt-0.5">{{ number_format($user->wallet_balance ?? 0, 2, ',', ' ') }} &euro;</p>
         </div>
     </div>
     <form method="POST" action="/admin/users/{{ $user->id }}/wallet-adjust" class="flex flex-wrap gap-3 items-end">
         @csrf
         <div>
-            <label for="amount" class="block text-sm text-gray-400 mb-1">Montant (+/-)</label>
+            <label for="amount" class="block text-xs font-medium text-zinc-400 mb-1.5">Montant (+/-)</label>
             <input type="number" id="amount" name="amount" step="0.01" required
-                   class="w-40 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
+                   class="w-40 bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 px-3 py-2 outline-none transition">
         </div>
         <div class="flex-1 min-w-[200px]">
-            <label for="description" class="block text-sm text-gray-400 mb-1">Description</label>
+            <label for="description" class="block text-xs font-medium text-zinc-400 mb-1.5">Description</label>
             <input type="text" id="description" name="description" required
-                   class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
+                   class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2 outline-none transition">
         </div>
-        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition">Ajuster</button>
+        <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">Ajuster</button>
     </form>
 </div>
 
 {{-- Subscriptions --}}
-<div class="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-    <h2 class="text-lg font-semibold mb-4">Abonnements</h2>
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mb-6">
+    <div class="px-4 py-3 border-b border-zinc-800">
+        <h2 class="text-sm font-medium text-zinc-300">Abonnements</h2>
+    </div>
     <div class="overflow-x-auto">
-        <table class="w-full text-sm border-collapse">
+        <table class="w-full text-sm">
             <thead>
-                <tr class="border-b border-gray-700 text-left text-gray-400">
-                    <th class="pb-2 pr-4">Formule</th>
-                    <th class="pb-2 pr-4">Statut</th>
-                    <th class="pb-2 pr-4">Début</th>
-                    <th class="pb-2">Fin</th>
+                <tr class="border-b border-zinc-800">
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Formule</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Statut</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Début</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Fin</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-zinc-800/50">
                 @forelse($subscriptions as $sub)
-                    <tr class="border-b border-gray-700/50 hover:bg-gray-700">
-                        <td class="py-2 pr-4">{{ $sub->plan->name }}</td>
-                        <td class="py-2 pr-4">
+                    <tr class="hover:bg-zinc-800/30 transition">
+                        <td class="px-4 py-3 text-zinc-300">{{ $sub->plan->name }}</td>
+                        <td class="px-4 py-3">
                             @if($sub->status === 'active')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-green-900/50 text-green-400 border border-green-700">active</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">active</span>
                             @elseif($sub->status === 'cancelled')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400 border border-gray-600">annulé</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">annulé</span>
                             @elseif($sub->status === 'pending')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-900/50 text-yellow-400 border border-yellow-700">en attente</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">en attente</span>
                             @else
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400 border border-gray-600">{{ $sub->status }}</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">{{ $sub->status }}</span>
                             @endif
                         </td>
-                        <td class="py-2 pr-4 text-gray-400">{{ $sub->current_period_start ? $sub->current_period_start->format('d/m/Y') : '—' }}</td>
-                        <td class="py-2 text-gray-400">{{ $sub->current_period_end ? $sub->current_period_end->format('d/m/Y') : '—' }}</td>
+                        <td class="px-4 py-3 text-zinc-500">{{ $sub->current_period_start ? $sub->current_period_start->format('d/m/Y') : '—' }}</td>
+                        <td class="px-4 py-3 text-zinc-500">{{ $sub->current_period_end ? $sub->current_period_end->format('d/m/Y') : '—' }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="py-4 text-center text-gray-500">Aucun abonnement.</td></tr>
+                    <tr><td colspan="4" class="px-4 py-6 text-center text-zinc-600">Aucun abonnement.</td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -155,38 +159,40 @@
 </div>
 
 {{-- Payments --}}
-<div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
-    <h2 class="text-lg font-semibold mb-4">Paiements</h2>
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b border-zinc-800">
+        <h2 class="text-sm font-medium text-zinc-300">Paiements</h2>
+    </div>
     <div class="overflow-x-auto">
-        <table class="w-full text-sm border-collapse">
+        <table class="w-full text-sm">
             <thead>
-                <tr class="border-b border-gray-700 text-left text-gray-400">
-                    <th class="pb-2 pr-4">Montant</th>
-                    <th class="pb-2 pr-4">Statut</th>
-                    <th class="pb-2 pr-4">Description</th>
-                    <th class="pb-2">Date</th>
+                <tr class="border-b border-zinc-800">
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Montant</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Statut</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Description</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Date</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-zinc-800/50">
                 @forelse($payments as $payment)
-                    <tr class="border-b border-gray-700/50 hover:bg-gray-700">
-                        <td class="py-2 pr-4">{{ number_format($payment->amount, 2, ',', ' ') }} &euro;</td>
-                        <td class="py-2 pr-4">
+                    <tr class="hover:bg-zinc-800/30 transition">
+                        <td class="px-4 py-3 text-zinc-300">{{ number_format($payment->amount, 2, ',', ' ') }} &euro;</td>
+                        <td class="px-4 py-3">
                             @if($payment->status === 'succeeded')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-green-900/50 text-green-400 border border-green-700">{{ $payment->status }}</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{{ $payment->status }}</span>
                             @elseif($payment->status === 'pending')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-900/50 text-yellow-400 border border-yellow-700">{{ $payment->status }}</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">{{ $payment->status }}</span>
                             @elseif($payment->status === 'failed')
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-red-900/50 text-red-400 border border-red-700">{{ $payment->status }}</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{{ $payment->status }}</span>
                             @else
-                                <span class="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400 border border-gray-600">{{ $payment->status }}</span>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">{{ $payment->status }}</span>
                             @endif
                         </td>
-                        <td class="py-2 pr-4 text-gray-400">{{ $payment->description ?: '—' }}</td>
-                        <td class="py-2 text-gray-400">{{ $payment->created_at->format('d/m/Y H:i') }}</td>
+                        <td class="px-4 py-3 text-zinc-500">{{ $payment->description ?: '—' }}</td>
+                        <td class="px-4 py-3 text-zinc-500">{{ $payment->created_at->format('d/m/Y H:i') }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="py-4 text-center text-gray-500">Aucun paiement.</td></tr>
+                    <tr><td colspan="4" class="px-4 py-6 text-center text-zinc-600">Aucun paiement.</td></tr>
                 @endforelse
             </tbody>
         </table>

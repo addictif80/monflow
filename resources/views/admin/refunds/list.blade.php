@@ -1,35 +1,48 @@
 @extends('layouts.admin')
 @section('title', 'Remboursements — Admin MonFlow')
 @section('content')
-<h1 class="text-2xl font-bold mb-6">Remboursements</h1>
-<div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+<div class="mb-6">
+    <h1 class="text-base font-semibold text-zinc-100">Remboursements</h1>
+    <p class="text-sm text-zinc-500 mt-0.5">Historique des remboursements traités</p>
+</div>
+
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
-            <thead><tr class="border-b border-gray-700 text-left text-gray-400">
-                <th class="px-4 py-3">Utilisateur</th>
-                <th class="px-4 py-3">Montant</th>
-                <th class="px-4 py-3">Raison</th>
-                <th class="px-4 py-3">Destination</th>
-                <th class="px-4 py-3">Statut</th>
-                <th class="px-4 py-3">Traité par</th>
-                <th class="px-4 py-3">Date</th>
-            </tr></thead>
-            <tbody>
+            <thead>
+                <tr class="border-b border-zinc-800">
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Utilisateur</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Montant</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Raison</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Destination</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Statut</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Traité par</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Date</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800/50">
             @forelse($refunds as $r)
-                <tr class="border-b border-gray-700/50 hover:bg-gray-700">
-                    <td class="px-4 py-3">{{ $r->payment?->user?->username ?? '—' }}</td>
-                    <td class="px-4 py-3 font-mono">{{ number_format($r->amount, 2, ',', ' ') }} €</td>
-                    <td class="px-4 py-3 text-gray-400">{{ Str::limit($r->reason, 50) }}</td>
-                    <td class="px-4 py-3 text-gray-400">{{ $r->refund_to === 'original' ? 'Moyen original' : 'Portefeuille' }}</td>
+                <tr class="hover:bg-zinc-800/30 transition">
+                    <td class="px-4 py-3 text-zinc-300">{{ $r->payment?->user?->username ?? '—' }}</td>
+                    <td class="px-4 py-3 font-mono text-zinc-300">{{ number_format($r->amount, 2, ',', ' ') }} €</td>
+                    <td class="px-4 py-3 text-zinc-500">{{ Str::limit($r->reason, 50) }}</td>
+                    <td class="px-4 py-3 text-zinc-500">{{ $r->refund_to === 'original' ? 'Moyen original' : 'Portefeuille' }}</td>
                     <td class="px-4 py-3">
-                        @php $colors = ['processed' => 'green', 'pending' => 'yellow', 'failed' => 'red']; $c = $colors[$r->status] ?? 'gray'; @endphp
-                        <span class="px-2 py-0.5 text-xs rounded-full bg-{{ $c }}-900/50 text-{{ $c }}-400 border border-{{ $c }}-700">{{ $r->status }}</span>
+                        @if($r->status === 'processed')
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{{ $r->status }}</span>
+                        @elseif($r->status === 'pending')
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">{{ $r->status }}</span>
+                        @elseif($r->status === 'failed')
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{{ $r->status }}</span>
+                        @else
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">{{ $r->status }}</span>
+                        @endif
                     </td>
-                    <td class="px-4 py-3 text-gray-400">{{ $r->processedBy?->username ?? '—' }}</td>
-                    <td class="px-4 py-3 text-gray-400">{{ $r->created_at->format('d/m/Y H:i') }}</td>
+                    <td class="px-4 py-3 text-zinc-500">{{ $r->processedBy?->username ?? '—' }}</td>
+                    <td class="px-4 py-3 text-zinc-500">{{ $r->created_at->format('d/m/Y H:i') }}</td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="px-4 py-6 text-center text-gray-500">Aucun remboursement.</td></tr>
+                <tr><td colspan="7" class="px-4 py-6 text-center text-zinc-600">Aucun remboursement.</td></tr>
             @endforelse
             </tbody>
         </table>
