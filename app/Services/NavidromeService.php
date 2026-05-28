@@ -274,15 +274,37 @@ class NavidromeService
 
     public function triggerScan(bool $full = false): void
     {
-        $salt = bin2hex(random_bytes(6));
-        $token = md5($this->adminPassword . $salt);
-        $publicUrl = rtrim(config('navidrome.public_url'), '/');
-        $params = [
-            'u' => $this->adminUser, 't' => $token, 's' => $salt,
-            'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json',
-        ];
-        if ($full) $params['fullScan'] = 'true';
-        Http::timeout(10)->get("{$publicUrl}/rest/startScan.view", $params);
+        // Use internal REST API — Subsonic startScan.view is incremental only and
+        // does not remove deleted files from the database.
+        try {
+            $this->request('post', '/scanner', ['fullScan' => $full]);
+        } catch (\Throwable) {
+            // Fallback: Subsonic API
+            $salt = bin2hex(random_bytes(6));
+            $token = md5($this->adminPassword . $salt);
+            $publicUrl = rtrim(config('navidrome.public_url'), '/');
+            $params = [
+                'u' => $this->adminUser, 't' => $token, 's' => $salt,
+                'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json',
+            ];
+            if ($full) $params['fullScan'] = 'true';
+            Http::timeout(10)->get("{$publicUrl}/rest/startScan.view", $params);
+        }
+    }
+
+    public function getScanStatus(): array
+    {
+        try {
+            $data = $this->request('get', '/scanner');
+            return [
+                'scanning'  => (bool)($data['scanning'] ?? false),
+                'count'     => (int)($data['count'] ?? 0),
+                'folderCount' => (int)($data['folderCount'] ?? 0),
+                'lastScan'  => $data['lastScan'] ?? null,
+            ];
+        } catch (\Throwable) {
+            return ['scanning' => false, 'count' => 0, 'folderCount' => 0, 'lastScan' => null];
+        }
     }
 
     private function sshPrefix(): string
