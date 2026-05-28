@@ -601,8 +601,11 @@ class AdminController extends Controller
                 $errors[] = ($titles[$i] ?? "ID {$id}") . ' : chemin manquant';
                 continue;
             }
+            // Navidrome's internal API returns full absolute paths already.
+            // Only prepend music_path when the stored path is relative.
+            $fullPath = str_starts_with($songPath, '/') ? $songPath : ($musicPath . '/' . ltrim($songPath, '/'));
             $fullPaths[$id] = [
-                'path'  => $musicPath . '/' . ltrim($songPath, '/'),
+                'path'  => $fullPath,
                 'title' => $titles[$i] ?? '',
             ];
         }
@@ -610,15 +613,38 @@ class AdminController extends Controller
         $deleted = 0;
         if (!empty($fullPaths)) {
             try {
-                $encoded = base64_encode(implode("\n", array_column($fullPaths, 'path')));
-                $result  = $nd->sshCommand("echo {$encoded} | base64 -d | tr '\\n' '\\0' | xargs -0 rm -f");
-                if ($result['exitCode'] === 0) {
-                    $deleted = count($fullPaths);
-                    foreach ($fullPaths as $id => $info) {
-                        AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $info['title'], 'path' => $info['path']]);
+                $pathList = array_column($fullPaths, 'path');
+
+                // Verify which paths actually exist before deleting, so we
+                // never report success on paths that were wrong.
+                $encoded = base64_encode(implode("\n", $pathList));
+                $check   = $nd->sshCommand(
+                    "echo {$encoded} | base64 -d | tr '\\n' '\\0' | xargs -0 -I{} sh -c 'test -f \"{}\" && echo \"OK:{}\" || echo \"MISSING:{}\"'"
+                );
+                $existingPaths = [];
+                foreach (explode("\n", $check['output']) as $line) {
+                    if (str_starts_with($line, 'OK:')) {
+                        $existingPaths[] = substr($line, 3);
+                    } elseif (str_starts_with($line, 'MISSING:')) {
+                        $missingPath = substr($line, 8);
+                        $errors[] = "Fichier introuvable sur le serveur : {$missingPath}";
                     }
-                } else {
-                    $errors[] = $result['output'];
+                }
+
+                if (!empty($existingPaths)) {
+                    $encoded2 = base64_encode(implode("\n", $existingPaths));
+                    $result   = $nd->sshCommand("echo {$encoded2} | base64 -d | tr '\\n' '\\0' | xargs -0 rm -f");
+                    if ($result['exitCode'] === 0) {
+                        // Only count paths that actually existed
+                        $deleted = count($existingPaths);
+                        foreach ($fullPaths as $id => $info) {
+                            if (in_array($info['path'], $existingPaths)) {
+                                AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $info['title'], 'path' => $info['path']]);
+                            }
+                        }
+                    } else {
+                        $errors[] = $result['output'];
+                    }
                 }
             } catch (\Exception $e) {
                 $errors[] = $e->getMessage();
