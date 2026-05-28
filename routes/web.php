@@ -204,6 +204,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     // Metadata management
     Route::get('/metadata', [AdminController::class, 'metadata']);
     Route::get('/metadata/search-artwork', [AdminController::class, 'metadataSearchArtwork']);
+    Route::get('/metadata/missing-covers', [AdminController::class, 'metadataMissingCovers']);
     Route::get('/metadata/{id}/edit', [AdminController::class, 'metadataEdit']);
     Route::post('/metadata/{id}/save', [AdminController::class, 'metadataSave']);
     Route::post('/metadata/{id}/cover', [AdminController::class, 'metadataCover']);

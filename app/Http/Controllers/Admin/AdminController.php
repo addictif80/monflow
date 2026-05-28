@@ -580,6 +580,39 @@ class AdminController extends Controller
         }
     }
 
+    public function metadataMissingCovers(NavidromeService $nd)
+    {
+        $missing = [];
+        $start   = 0;
+        $perPage = 500;
+
+        do {
+            try {
+                $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC');
+                $page   = $result['data'];
+                $total  = $result['total'];
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+
+            foreach ($page as $song) {
+                // coverArt absent or empty means no embedded/folder art
+                if (empty($song['coverArt'])) {
+                    $missing[] = [
+                        'id'     => $song['id'],
+                        'title'  => $song['title']  ?? '',
+                        'artist' => $song['artist']  ?? '',
+                        'album'  => $song['album']   ?? '',
+                    ];
+                }
+            }
+
+            $start += $perPage;
+        } while (count($page) === $perPage && $start < $total);
+
+        return response()->json($missing);
+    }
+
     public function metadataSearchArtwork(Request $request)
     {
         $q = trim($request->input('q', ''));

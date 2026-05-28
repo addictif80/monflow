@@ -7,6 +7,78 @@
         <h1 class="text-base font-semibold text-zinc-100">Gestion des métadonnées</h1>
         <p class="text-sm text-zinc-500 mt-0.5">{{ number_format($total) }} titre(s) au total</p>
     </div>
+    <button type="button" onclick="openBulkCovers()"
+            class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Pochettes manquantes
+    </button>
+</div>
+
+{{-- Modal pochettes manquantes --}}
+<div id="bulkCoverModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.7)">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-zinc-100">Correction automatique des pochettes</h2>
+            <button onclick="closeBulkCovers()" class="text-zinc-600 hover:text-zinc-300 transition text-lg leading-none">✕</button>
+        </div>
+
+        {{-- Étape 1 : scan --}}
+        <div id="bulkStep1">
+            <p class="text-sm text-zinc-400 mb-4">Analyse tous les titres de la bibliothèque pour trouver ceux sans pochette, puis télécharge et intègre automatiquement la meilleure correspondance via iTunes.</p>
+            <button onclick="startBulkScan()" id="bulkScanBtn"
+                    class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <span id="bulkScanLabel">Analyser la bibliothèque</span>
+                <svg id="bulkScanSpin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+            </button>
+        </div>
+
+        {{-- Étape 2 : résultats + lancement --}}
+        <div id="bulkStep2" class="hidden">
+            <div class="mb-4 p-3 bg-zinc-800 rounded-lg text-sm">
+                <span class="text-zinc-300 font-medium" id="bulkFoundCount">0</span>
+                <span class="text-zinc-500"> titre(s) sans pochette détecté(s)</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="startBulkFix()" id="bulkFixBtn"
+                        class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                    Lancer la correction automatique
+                </button>
+                <button onclick="closeBulkCovers()" class="text-sm text-zinc-500 hover:text-zinc-300 transition">Annuler</button>
+            </div>
+        </div>
+
+        {{-- Étape 3 : progression --}}
+        <div id="bulkStep3" class="hidden">
+            <div class="mb-3 flex items-center justify-between text-xs text-zinc-500">
+                <span id="bulkProgressLabel">Initialisation…</span>
+                <span id="bulkProgressCount">0 / 0</span>
+            </div>
+            <div class="w-full bg-zinc-800 rounded-full h-2 mb-4">
+                <div id="bulkProgressBar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+            </div>
+            <div class="text-xs text-zinc-600 mb-3 truncate" id="bulkCurrentTitle">—</div>
+            <div class="flex gap-4 text-xs">
+                <span class="text-emerald-400"><span id="bulkOk">0</span> appliquées</span>
+                <span class="text-zinc-500"><span id="bulkSkipped">0</span> ignorées (aucun résultat)</span>
+                <span class="text-red-400"><span id="bulkFailed">0</span> erreurs</span>
+            </div>
+        </div>
+
+        {{-- Étape 4 : terminé --}}
+        <div id="bulkStep4" class="hidden">
+            <div class="flex items-center gap-2 text-emerald-400 mb-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span class="text-sm font-medium">Correction terminée</span>
+            </div>
+            <div class="text-xs text-zinc-500 space-y-1 mb-4">
+                <div><span class="text-emerald-400 font-medium" id="bulkFinalOk">0</span> pochette(s) appliquée(s)</div>
+                <div><span class="text-zinc-400 font-medium" id="bulkFinalSkipped">0</span> ignorée(s) (aucun résultat iTunes)</div>
+                <div><span class="text-red-400 font-medium" id="bulkFinalFailed">0</span> erreur(s)</div>
+            </div>
+            <button onclick="closeBulkCovers()" class="text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg border border-zinc-700 transition">Fermer</button>
+        </div>
+    </div>
 </div>
 
 <form method="GET" class="mb-4 flex items-center gap-3 flex-wrap">
@@ -333,6 +405,117 @@ async function applyCover(btn, editRow) {
         btn.disabled = false;
     }
 }
+
+// ─── Bulk cover fix ───────────────────────────────────────────────────────────
+
+let bulkSongs = [];
+let bulkAbort = false;
+
+function openBulkCovers() {
+    bulkAbort = false;
+    bulkSongs = [];
+    showBulkStep(1);
+    document.getElementById('bulkCoverModal').classList.remove('hidden');
+}
+
+function closeBulkCovers() {
+    bulkAbort = true;
+    document.getElementById('bulkCoverModal').classList.add('hidden');
+}
+
+function showBulkStep(n) {
+    [1,2,3,4].forEach(i => document.getElementById(`bulkStep${i}`).classList.add('hidden'));
+    document.getElementById(`bulkStep${n}`).classList.remove('hidden');
+}
+
+async function startBulkScan() {
+    const btn   = document.getElementById('bulkScanBtn');
+    const label = document.getElementById('bulkScanLabel');
+    const spin  = document.getElementById('bulkScanSpin');
+    label.classList.add('opacity-0');
+    spin.classList.remove('hidden');
+    btn.disabled = true;
+
+    try {
+        const res  = await fetch('/admin/metadata/missing-covers', { headers: { Accept: 'application/json' } });
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error(data.error || 'Erreur serveur');
+        bulkSongs = data;
+        document.getElementById('bulkFoundCount').textContent = data.length;
+        document.getElementById('bulkFixBtn').disabled = data.length === 0;
+        showBulkStep(2);
+    } catch(e) {
+        alert('Erreur lors de l\'analyse : ' + e.message);
+    } finally {
+        label.classList.remove('opacity-0');
+        spin.classList.add('hidden');
+        btn.disabled = false;
+    }
+}
+
+async function startBulkFix() {
+    if (!bulkSongs.length) return;
+    bulkAbort = false;
+    showBulkStep(3);
+
+    let ok = 0, skipped = 0, failed = 0;
+    const total = bulkSongs.length;
+
+    const setProgress = (i, title) => {
+        const pct = Math.round((i / total) * 100);
+        document.getElementById('bulkProgressBar').style.width = pct + '%';
+        document.getElementById('bulkProgressCount').textContent = `${i} / ${total}`;
+        document.getElementById('bulkCurrentTitle').textContent = title || '';
+        document.getElementById('bulkOk').textContent      = ok;
+        document.getElementById('bulkSkipped').textContent  = skipped;
+        document.getElementById('bulkFailed').textContent   = failed;
+    };
+
+    for (let i = 0; i < bulkSongs.length; i++) {
+        if (bulkAbort) break;
+        const song = bulkSongs[i];
+        document.getElementById('bulkProgressLabel').textContent = 'Traitement en cours…';
+        setProgress(i, `${song.artist} — ${song.title}`);
+
+        try {
+            // 1. Search iTunes
+            const q   = encodeURIComponent([song.artist, song.album || song.title].filter(Boolean).join(' '));
+            const res = await fetch('/admin/metadata/search-artwork?q=' + q, { headers: { Accept: 'application/json' } });
+            const results = await res.json();
+
+            if (!Array.isArray(results) || results.length === 0) {
+                skipped++;
+                continue;
+            }
+
+            // 2. Apply first result
+            const artworkUrl = results[0].full;
+            const body = new URLSearchParams({ _token: csrfToken, artwork_url: artworkUrl });
+            const applyRes = await fetch(`/admin/metadata/${song.id}/cover`, {
+                method: 'POST',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+            });
+            const applyJson = await applyRes.json();
+            if (applyRes.ok && applyJson.success) ok++;
+            else failed++;
+
+        } catch {
+            failed++;
+        }
+
+        setProgress(i + 1, '');
+        // Small delay to avoid hammering iTunes API
+        await new Promise(r => setTimeout(r, 300));
+    }
+
+    document.getElementById('bulkFinalOk').textContent      = ok;
+    document.getElementById('bulkFinalSkipped').textContent  = skipped;
+    document.getElementById('bulkFinalFailed').textContent   = failed;
+    showBulkStep(4);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 function showNotif(msg, type) {
     const el = document.getElementById('saveNotif');
