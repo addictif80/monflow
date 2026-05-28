@@ -620,45 +620,81 @@ class AdminController extends Controller
                 $pathList = implode("\n", array_column($fullPaths, 'path'));
                 $encoded  = base64_encode($pathList);
 
-                // 1. Supprimer les fichiers physiques (while IFS= read -r gère apostrophes, accents…)
-                $result = $nd->sshCommand(
-                    "echo {$encoded} | base64 -d | while IFS= read -r f; do rm -f \"\$f\" 2>/dev/null; done"
-                );
+                // 1. Supprimer les fichiers physiques.
+                // Le script retourne "deleted=N missing=M" pour savoir combien existaient réellement.
+                // while IFS= read -r gère apostrophes, accents, espaces, parenthèses…
+                $script = 'echo ' . $encoded . ' | base64 -d | '
+                    . 'while IFS= read -r f; do '
+                    .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                    .   'else echo "MISSING:$f"; fi; '
+                    . 'done';
+
+                $result = $nd->sshCommand($script);
+
+                // Parser la sortie ligne par ligne
+                $actualDeleted = [];
+                $missing       = [];
+                $failed        = [];
+                foreach (explode("\n", trim($result['output'] ?? '')) as $line) {
+                    $line = trim($line);
+                    if (str_starts_with($line, 'DELETED:')) $actualDeleted[] = substr($line, 8);
+                    elseif (str_starts_with($line, 'MISSING:')) $missing[]   = substr($line, 8);
+                    elseif (str_starts_with($line, 'FAILED:'))  $failed[]    = substr($line, 7);
+                }
 
                 if ($result['exitCode'] === 0) {
-                    $deleted = count($fullPaths);
+                    $deleted = count($actualDeleted);
+
+                    // N'audit que les fichiers réellement supprimés
+                    $pathToId = [];
                     foreach ($fullPaths as $id => $info) {
+                        $pathToId[$info['path']] = ['id' => $id, 'title' => $info['title']];
+                    }
+                    foreach ($actualDeleted as $path) {
+                        $meta = $pathToId[$path] ?? null;
                         AuditLog::record('duplicate.delete', null, [
-                            'song_id' => $id,
-                            'title'   => $info['title'],
-                            'path'    => $info['path'],
+                            'song_id' => $meta['id'] ?? null,
+                            'title'   => $meta['title'] ?? basename($path),
+                            'path'    => $path,
                         ]);
                     }
+                    if (!empty($missing)) {
+                        $errors[] = count($missing) . ' fichier(s) introuvable(s) sur le serveur (déjà supprimés ?)';
+                    }
+                    if (!empty($failed)) {
+                        $errors[] = count($failed) . ' suppression(s) échouée(s) (droits ?)';
+                    }
 
-                    // 2. Supprimer les entrées directement dans la BDD SQLite de Navidrome
-                    //    via docker exec (si configuré) ou sqlite3 direct sur le chemin hôte.
-                    //    Évite d'attendre un scan qui ne nettoie pas les entrées orphelines.
-                    $ids     = array_keys($fullPaths);
-                    $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $ids);
-                    $inList  = "'" . implode("','", $safeIds) . "'";
-                    $sqlStmt = "DELETE FROM media_file WHERE id IN ({$inList});";
+                    // 2. Supprimer de la BDD les entrées dont le fichier n'est plus sur disque
+                    //    (supprimés avec succès + déjà absents = ghost entries).
+                    //    Les fichiers en échec (droits) restent sur disque → on les garde en BDD.
+                    $goneFromDisk = array_merge($actualDeleted, $missing);
+                    $idsToRemove  = [];
+                    foreach ($goneFromDisk as $path) {
+                        if (isset($pathToId[$path])) {
+                            $idsToRemove[] = $pathToId[$path]['id'];
+                        }
+                    }
 
-                    $container = config('navidrome.docker_container');
-                    $dbPath    = config('navidrome.db_path');
+                    if (!empty($idsToRemove)) {
+                        $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $idsToRemove);
+                        $inList  = "'" . implode("','", $safeIds) . "'";
+                        $sqlStmt = "DELETE FROM media_file WHERE id IN ({$inList});";
 
-                    if ($container) {
-                        // Navidrome dans Docker — sqlite3 à l'intérieur du conteneur
-                        $ndDbPath = config('navidrome.db_path', '/data/navidrome.db');
-                        $nd->sshCommand(
-                            'docker exec ' . escapeshellarg($container) .
-                            ' sqlite3 ' . escapeshellarg($ndDbPath) .
-                            ' ' . escapeshellarg($sqlStmt)
-                        );
-                    } elseif ($dbPath) {
-                        // sqlite3 direct sur le chemin hôte
-                        $nd->sshCommand(
-                            'sqlite3 ' . escapeshellarg($dbPath) . ' ' . escapeshellarg($sqlStmt)
-                        );
+                        $container = config('navidrome.docker_container');
+                        $dbPath    = config('navidrome.db_path');
+
+                        if ($container) {
+                            $nd->sshCommand(
+                                'docker exec ' . escapeshellarg($container) .
+                                ' sqlite3 ' . escapeshellarg($dbPath) .
+                                ' ' . escapeshellarg($sqlStmt)
+                            );
+                        } elseif ($dbPath) {
+                            $nd->sshCommand(
+                                'sqlite3 ' . escapeshellarg($dbPath) . ' ' . escapeshellarg($sqlStmt)
+                            );
+                        }
                     }
 
                     // Scan léger pour recalculer les compteurs album/artiste
@@ -671,9 +707,14 @@ class AdminController extends Controller
             }
         }
 
-        $msg = $deleted > 0
-            ? "{$deleted} fichier(s) supprimé(s) et retirés de la bibliothèque Navidrome."
-            : '';
+        $total = count($fullPaths);
+        if ($deleted > 0) {
+            $msg = "{$deleted}/{$total} fichier(s) supprimé(s) du serveur et retirés de la bibliothèque Navidrome.";
+        } elseif ($total > 0) {
+            $msg = '';
+        } else {
+            $msg = '';
+        }
         if (!empty($errors)) {
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
         }
