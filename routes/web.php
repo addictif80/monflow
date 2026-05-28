@@ -208,6 +208,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Duplicate management
     Route::get('/duplicates', [AdminController::class, 'duplicates']);
+    Route::get('/duplicates/scan-status', [AdminController::class, 'duplicateScanStatus']);
     Route::post('/duplicates/batch-delete', [AdminController::class, 'duplicateBatchDelete']);
 
     // Newsletters

@@ -6,6 +6,38 @@
     <p class="text-sm text-zinc-500 mt-0.5">Détection et suppression des fichiers en double</p>
 </div>
 
+{{-- Scan-in-progress banner (shown after a delete, auto-hides when scan finishes) --}}
+@if(session('scanning'))
+<div id="scanBanner" class="mb-4 flex items-center gap-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-indigo-300 text-sm">
+    <svg class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+    <span id="scanMsg">Scan Navidrome en cours — patientez avant de rescanner…</span>
+    <button onclick="document.getElementById('scanBanner').remove()" class="ml-auto text-indigo-500 hover:text-indigo-300 transition text-xs">Fermer</button>
+</div>
+<script>
+(function pollScan() {
+    fetch('/admin/duplicates/scan-status')
+        .then(r => r.json())
+        .then(d => {
+            if (d.scanning) {
+                document.getElementById('scanMsg').textContent =
+                    'Scan Navidrome en cours (' + (d.count || 0) + ' fichiers traités)…';
+                setTimeout(pollScan, 3000);
+            } else {
+                const b = document.getElementById('scanBanner');
+                if (b) {
+                    b.className = b.className.replace('indigo', 'emerald');
+                    document.getElementById('scanMsg').textContent =
+                        'Scan terminé. Cliquez sur "Scanner la bibliothèque" pour voir les doublons restants.';
+                    const spin = b.querySelector('svg');
+                    if (spin) spin.classList.remove('animate-spin');
+                }
+            }
+        })
+        .catch(() => setTimeout(pollScan, 5000));
+})();
+</script>
+@endif
+
 <div class="mb-6 flex items-center gap-4">
     <form method="GET">
         <input type="hidden" name="scan" value="1">

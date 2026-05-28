@@ -579,6 +579,11 @@ class AdminController extends Controller
         return view('admin.duplicates.index', compact('duplicates', 'scanned'));
     }
 
+    public function duplicateScanStatus(NavidromeService $nd)
+    {
+        return response()->json($nd->getScanStatus());
+    }
+
     public function duplicateBatchDelete(Request $request, NavidromeService $nd)
     {
         $ids    = $request->input('ids', []);
@@ -642,12 +647,19 @@ class AdminController extends Controller
         }
 
         $msg = $deleted > 0
-            ? "{$deleted} fichier(s) supprimé(s). Le scan Navidrome est en cours, patientez quelques instants avant de rescanner."
+            ? "{$deleted} fichier(s) supprimé(s). Le scan Navidrome (complet) a été déclenché."
             : '';
         if (!empty($errors)) {
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
         }
-        return redirect('/admin/duplicates')->with($deleted > 0 ? 'success' : 'error', $msg);
+
+        $redirect = redirect('/admin/duplicates');
+        if ($deleted > 0) {
+            $redirect = $redirect->with('success', $msg)->with('scanning', true);
+        } else {
+            $redirect = $redirect->with('error', $msg ?: 'Aucun fichier à supprimer.');
+        }
+        return $redirect;
     }
 
     // ─── Audit Logs ───
