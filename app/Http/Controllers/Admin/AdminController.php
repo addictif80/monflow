@@ -636,28 +636,33 @@ class AdminController extends Controller
                     }
 
                     // 2. Supprimer les entrées directement dans la BDD SQLite de Navidrome
-                    //    (évite d'attendre un scan complet qui peut ne pas nettoyer les entrées orphelines)
-                    $dbPath = config('navidrome.db_path');
-                    if ($dbPath) {
-                        $ids = array_keys($fullPaths);
-                        // Construit la liste d'IDs en base64 pour éviter tout problème de quoting
-                        $idsEncoded = base64_encode(implode("\n", $ids));
-                        $sql = "DELETE FROM media_file WHERE id IN (" .
-                               implode(',', array_fill(0, count($ids), '?')) . ")";
-                        // Passe chaque ID comme argument positionnel via printf + sqlite3
-                        $placeholders = implode(' ', array_fill(0, count($ids), "'%s'"));
-                        $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $ids);
-                        $inList  = "'" . implode("','", $safeIds) . "'";
+                    //    via docker exec (si configuré) ou sqlite3 direct sur le chemin hôte.
+                    //    Évite d'attendre un scan qui ne nettoie pas les entrées orphelines.
+                    $ids     = array_keys($fullPaths);
+                    $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $ids);
+                    $inList  = "'" . implode("','", $safeIds) . "'";
+                    $sqlStmt = "DELETE FROM media_file WHERE id IN ({$inList});";
+
+                    $container = config('navidrome.docker_container');
+                    $dbPath    = config('navidrome.db_path');
+
+                    if ($container) {
+                        // Navidrome dans Docker — sqlite3 à l'intérieur du conteneur
+                        $ndDbPath = config('navidrome.db_path', '/data/navidrome.db');
                         $nd->sshCommand(
-                            "sqlite3 " . escapeshellarg($dbPath) .
-                            " \"DELETE FROM media_file WHERE id IN ({$inList});\""
+                            'docker exec ' . escapeshellarg($container) .
+                            ' sqlite3 ' . escapeshellarg($ndDbPath) .
+                            ' ' . escapeshellarg($sqlStmt)
                         );
-                        // Déclenche aussi un scan léger pour mettre à jour les comptes d'albums/artistes
-                        $nd->triggerScan(false);
-                    } else {
-                        // Pas de chemin BDD configuré → scan complet en fallback
-                        $nd->triggerScan(true);
+                    } elseif ($dbPath) {
+                        // sqlite3 direct sur le chemin hôte
+                        $nd->sshCommand(
+                            'sqlite3 ' . escapeshellarg($dbPath) . ' ' . escapeshellarg($sqlStmt)
+                        );
                     }
+
+                    // Scan léger pour recalculer les compteurs album/artiste
+                    $nd->triggerScan(false);
                 } else {
                     $errors[] = $result['output'];
                 }
