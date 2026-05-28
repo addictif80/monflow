@@ -26,8 +26,10 @@
 <form method="POST" action="/admin/duplicates/batch-delete" id="batchForm">
     @csrf
     <div class="mb-4 flex items-center gap-3">
-        <button type="submit" id="deleteBtn" class="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/15 text-red-400 text-sm font-medium px-4 py-2 rounded-lg border border-red-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed" disabled onclick="return confirm('Supprimer definitivement les fichiers coches ?')">
-            Supprimer la selection (<span id="selectedCount">0</span>)
+        <button type="button" id="deleteBtn"
+                class="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/15 text-red-400 text-sm font-medium px-4 py-2 rounded-lg border border-red-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+            <span id="deleteBtnLabel">Supprimer la selection (<span id="selectedCount">0</span>)</span>
+            <svg id="deleteBtnSpinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
         </button>
         <button type="button" id="selectLowerBtn" class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs px-3 py-1.5 rounded-lg border border-zinc-700 transition">Selectionner les moins bons (bitrate inferieur)</button>
     </div>
@@ -55,7 +57,10 @@
             @foreach($group as $j => $s)
                 <tr class="hover:bg-zinc-800/30 transition" data-group="{{ $i }}" data-bitrate="{{ $s['bitRate'] ?? 0 }}">
                     <td class="px-4 py-2">
-                        <input type="checkbox" name="ids[]" value="{{ $s['id'] }}" class="dup-check accent-red-500 rounded">
+                        <input type="checkbox" class="dup-check accent-red-500 rounded"
+                           data-id="{{ $s['id'] }}"
+                           data-path="{{ $s['path'] ?? '' }}"
+                           data-title="{{ addslashes($s['title'] ?? '') }}">
                     </td>
                     <td class="px-4 py-2 text-zinc-400">{{ $s['album'] ?? '—' }}</td>
                     <td class="px-4 py-2 text-zinc-500">{{ gmdate('i:s', $s['duration'] ?? 0) }}</td>
@@ -72,9 +77,10 @@
 </form>
 
 <script>
-const checks = document.querySelectorAll('.dup-check');
-const countEl = document.getElementById('selectedCount');
+const checks   = document.querySelectorAll('.dup-check');
+const countEl  = document.getElementById('selectedCount');
 const deleteBtn = document.getElementById('deleteBtn');
+const form     = document.getElementById('batchForm');
 
 function updateCount() {
     const n = document.querySelectorAll('.dup-check:checked').length;
@@ -83,6 +89,7 @@ function updateCount() {
 }
 checks.forEach(c => c.addEventListener('change', updateCount));
 
+// "Sélectionner les moins bons"
 document.getElementById('selectLowerBtn').addEventListener('click', () => {
     const groups = {};
     document.querySelectorAll('tr[data-group]').forEach(tr => {
@@ -100,6 +107,34 @@ document.getElementById('selectLowerBtn').addEventListener('click', () => {
         });
     });
     updateCount();
+});
+
+// Suppression — injecte id/path/title des cases cochées sans refaire d'appels API
+deleteBtn.addEventListener('click', () => {
+    const checked = Array.from(document.querySelectorAll('.dup-check:checked'));
+    if (!checked.length) return;
+    if (!confirm('Supprimer définitivement les ' + checked.length + ' fichier(s) cochés ?')) return;
+
+    // Spinner + désactivation
+    document.getElementById('deleteBtnLabel').classList.add('opacity-0');
+    document.getElementById('deleteBtnSpinner').classList.remove('hidden');
+    deleteBtn.disabled = true;
+
+    // Supprimer les éventuels champs précédents
+    form.querySelectorAll('.submit-data').forEach(el => el.remove());
+
+    checked.forEach(cb => {
+        const add = (name, value) => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = name; inp.value = value; inp.className = 'submit-data';
+            form.appendChild(inp);
+        };
+        add('ids[]',    cb.dataset.id);
+        add('paths[]',  cb.dataset.path);
+        add('titles[]', cb.dataset.title);
+    });
+
+    form.submit();
 });
 </script>
 @endif
