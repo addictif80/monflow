@@ -64,7 +64,7 @@ function renderVars(t) {
 }
 function updatePreview() {
     var content = document.getElementById('nl-body').value;
-    var full = newsletterLayout.replace('{{ content }}', content);
+    var full = newsletterLayout.replace('@{{ content }}', content);
     full = renderVars(full);
     var f = document.getElementById('preview-frame');
     var d = f.contentDocument || f.contentWindow.document;
