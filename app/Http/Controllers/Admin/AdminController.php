@@ -581,6 +581,21 @@ class AdminController extends Controller
         }
     }
 
+    public function metadataCoverArt(string $id, NavidromeService $nd)
+    {
+        try {
+            $stream = $nd->getCoverArt($id, 120);
+            return response()->stream(function () use ($stream) {
+                echo $stream->body();
+            }, 200, [
+                'Content-Type'  => 'image/jpeg',
+                'Cache-Control' => 'private, max-age=300',
+            ]);
+        } catch (\Exception) {
+            abort(404);
+        }
+    }
+
     public function metadataMissingCovers(NavidromeService $nd)
     {
         $missing = [];

@@ -123,6 +123,16 @@
         </tr>
         <tr class="edit-row border-t border-indigo-500/20 bg-indigo-500/5 hidden" data-for="{{ $s['id'] }}">
             <td colspan="4" class="px-4 py-4">
+                <div class="flex gap-4">
+                {{-- Pochette actuelle --}}
+                <div class="flex-shrink-0">
+                    <label class="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Pochette actuelle</label>
+                    <img src="/admin/metadata/{{ $s['id'] }}/cover-art"
+                         class="cover-preview w-24 h-24 rounded-lg object-cover border border-zinc-700 bg-zinc-800"
+                         onerror="this.style.display='none'"
+                         alt="">
+                </div>
+                <div class="flex-1">
                 <div class="grid grid-cols-2 gap-3 mb-3 sm:grid-cols-3">
                     <div>
                         <label class="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Titre</label>
@@ -168,7 +178,7 @@
                     </div>
                     <div class="cover-results hidden flex flex-wrap gap-2"></div>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 mt-3">
                     <button type="button" onclick="saveRow(this)"
                             class="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
                         <span class="save-label">Enregistrer</span>
@@ -179,6 +189,8 @@
                     </button>
                     <button type="button" onclick="cancelEdit(this)" class="text-sm text-zinc-500 hover:text-zinc-300 transition">Annuler</button>
                 </div>
+                </div>{{-- /flex-1 --}}
+                </div>{{-- /flex gap-4 --}}
             </td>
         </tr>
         @empty
@@ -393,6 +405,9 @@ async function applyCover(btn, editRow) {
         const json = await res.json();
 
         if (res.ok && json.success) {
+            // Refresh the cover preview (cache-bust with timestamp)
+            const preview = editRow.querySelector('.cover-preview');
+            if (preview) preview.src = `/admin/metadata/${id}/cover-art?t=${Date.now()}`;
             showNotif('Pochette mise à jour.', 'success');
         } else {
             showNotif(json.error || 'Erreur lors de l\'application.', 'error');
