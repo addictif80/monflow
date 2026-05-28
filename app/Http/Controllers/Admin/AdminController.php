@@ -775,7 +775,7 @@ class AdminController extends Controller
     {
         $nl = Newsletter::findOrFail($id);
         $html = $this->applyNewsletterLayout($nl->html_body);
-        foreach (['site_name' => config('app.name'), 'site_url' => config('app.url')] as $k => $v) {
+        foreach (['site_name' => config('app.name'), 'site_url' => config('app.url'), 'sujet' => $nl->subject] as $k => $v) {
             $html = str_replace("{{ {$k} }}", $v, $html);
         }
         return response($html)->header('Content-Type', 'text/html');

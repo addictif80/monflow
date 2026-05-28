@@ -25,7 +25,7 @@
                           class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 font-mono placeholder-zinc-600 px-3 py-2 outline-none transition"
                           placeholder="<h1 style=&quot;...&quot;>Titre</h1>&#10;<p style=&quot;...&quot;>Votre texte...</p>">{{ old('html_body', $newsletter->html_body ?? '') }}</textarea>
                 @verbatim
-                <p class="text-xs text-zinc-600 mt-1">Ce contenu est injecté dans le template. Variables : {{ username }}, {{ first_name }}, {{ site_name }}, {{ site_url }}</p>
+                <p class="text-xs text-zinc-600 mt-1">Ce contenu est injecté dans le template. Variables : {{ sujet }}, {{ username }}, {{ first_name }}, {{ site_name }}, {{ site_url }}</p>
                 @endverbatim
             </div>
             <div class="flex gap-3">
@@ -53,9 +53,11 @@ var sampleVars = {
     username: 'jean.dupont',
     first_name: 'Jean',
     site_name: '{{ config("app.name") }}',
-    site_url: '{{ url("/") }}'
+    site_url: '{{ url("/") }}',
+    sujet: ''
 };
 function renderVars(t) {
+    sampleVars.sujet = document.getElementById('nl-subject').value || '(sujet)';
     for (var k in sampleVars) {
         t = t.split('{{ ' + k + ' }}').join(sampleVars[k]);
         t = t.split('{{' + k + '}}').join(sampleVars[k]);
@@ -73,6 +75,7 @@ function updatePreview() {
 }
 var t; function debounced() { clearTimeout(t); t = setTimeout(updatePreview, 150); }
 document.getElementById('nl-body').addEventListener('input', debounced);
+document.getElementById('nl-subject').addEventListener('input', debounced);
 updatePreview();
 </script>
 @endsection

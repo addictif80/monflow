@@ -22,7 +22,7 @@
                 <textarea name="html_body" id="tpl-body" rows="28" required
                           class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 font-mono placeholder-zinc-600 px-3 py-2 outline-none transition">{{ old('html_body', $template->html_body ?? '') }}</textarea>
                 @verbatim
-                <p class="text-xs text-zinc-600 mt-1">Autres variables disponibles : {{ site_name }}, {{ site_url }}, {{ username }}, {{ first_name }}</p>
+                <p class="text-xs text-zinc-600 mt-1">Variables disponibles : {{ content }}, {{ sujet }}, {{ site_name }}, {{ site_url }}, {{ username }}, {{ first_name }}</p>
                 @endverbatim
             </div>
             <div class="flex gap-3">
@@ -50,6 +50,7 @@ var sampleVars = {
     first_name: 'Jean',
     site_name: '{{ config("app.name") }}',
     site_url: '{{ url("/") }}',
+    sujet: 'Les nouveautés de la semaine',
     content: '<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#18181b">Titre de la newsletter</h1>'
            + '<p style="margin:0 0 16px;font-size:15px;color:#3f3f46;line-height:1.6">Voici un exemple de contenu pour visualiser le rendu de votre template avec un vrai texte.</p>'
            + '<p style="margin:0 0 16px;font-size:15px;color:#3f3f46;line-height:1.6">Le contenu réel sera celui que vous saisirez lors de la création de chaque newsletter.</p>'
