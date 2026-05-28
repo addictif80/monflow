@@ -744,6 +744,77 @@ class AdminController extends Controller
         return view('admin.audit-logs', ['logs' => $q->paginate(50)]);
     }
 
+    // ─── Server Logs ───
+    public function serverLogs(Request $request)
+    {
+        $logFile = storage_path('logs/laravel.log');
+        $lines   = (int) $request->input('lines', 200);
+        $lines   = max(50, min(2000, $lines));
+        $filter  = $request->input('filter', '');
+
+        $entries = [];
+        if (file_exists($logFile)) {
+            // Lire les N dernières lignes efficacement sans charger tout le fichier
+            $content = $this->tailFile($logFile, $lines * 10); // sur-lire pour filtrer
+            $raw = explode("\n", $content);
+
+            $current = null;
+            foreach ($raw as $line) {
+                // Nouvelle entrée de log : commence par [YYYY-MM-DD
+                if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.+)/', $line, $m)) {
+                    if ($current !== null) $entries[] = $current;
+                    $current = [
+                        'datetime' => $m[1],
+                        'env'      => $m[2],
+                        'level'    => strtolower($m[3]),
+                        'message'  => $m[4],
+                        'context'  => '',
+                        'raw'      => $line,
+                    ];
+                } elseif ($current !== null) {
+                    $current['context'] .= "\n" . $line;
+                    $current['raw']     .= "\n" . $line;
+                }
+            }
+            if ($current !== null) $entries[] = $current;
+
+            // Appliquer filtre texte
+            if ($filter !== '') {
+                $entries = array_filter($entries, fn($e) =>
+                    stripos($e['raw'], $filter) !== false
+                );
+            }
+
+            // Garder les N dernières entrées
+            $entries = array_slice(array_values($entries), -$lines);
+            $entries = array_reverse($entries); // plus récent en premier
+        }
+
+        return view('admin.logs', compact('entries', 'lines', 'filter', 'logFile'));
+    }
+
+    private function tailFile(string $path, int $maxLines): string
+    {
+        $fp   = fopen($path, 'rb');
+        $size = filesize($path);
+        if (!$fp || $size === 0) return '';
+
+        $chunk  = 65536; // 64 KB
+        $buffer = '';
+        $pos    = $size;
+        $found  = 0;
+
+        while ($pos > 0 && $found < $maxLines) {
+            $read   = min($chunk, $pos);
+            $pos   -= $read;
+            fseek($fp, $pos);
+            $buffer = fread($fp, $read) . $buffer;
+            $found  = substr_count($buffer, "\n");
+        }
+        fclose($fp);
+        return $buffer;
+    }
+
     // ─── Feedbacks ───
     public function feedbacks(Request $request)
     {
