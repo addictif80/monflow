@@ -29,6 +29,7 @@ class DashboardController extends Controller
         if ($request->isMethod('post')) {
             $data = $request->validate(['first_name' => 'nullable|max:100', 'last_name' => 'nullable|max:100', 'email' => 'required|email', 'phone' => 'nullable|max:20', 'newsletter_optin' => 'nullable']);
             $data['newsletter_optin'] = (bool) ($data['newsletter_optin'] ?? false);
+            $data['phone'] = $data['phone'] ?? '';
             $request->user()->update($data);
             if ($request->user()->navidrome_id) {
                 try { $nd->updateUser($request->user()->navidrome_id, ['name' => $request->user()->full_name, 'email' => $data['email']]); } catch (\Exception $e) {}

@@ -28,7 +28,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectUsersTo(fn () => auth()->user()?->is_admin ? '/admin' : '/portal');
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // In production (APP_DEBUG=false): convert unhandled exceptions to friendly responses.
+        // Debug mode keeps the Ignition error page for development.
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            if (config('app.debug')) return null;
+            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) return null;
+
+            \Illuminate\Support\Facades\Log::error($e->getMessage(), ['exception' => $e]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'Une erreur inattendue s\'est produite.'], 500);
+            }
+            if ($request->isMethod('post')) {
+                return redirect()->back()->withInput()
+                    ->with('error', 'Une erreur inattendue s\'est produite. Veuillez réessayer.');
+            }
+            return response()->view('errors.500', [], 500);
+        });
     })
     ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
         $schedule->command('subscriptions:check-overdue')->hourly();
