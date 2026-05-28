@@ -621,33 +621,86 @@ class AdminController extends Controller
                 $encoded  = base64_encode($pathList);
 
                 // 1. Supprimer les fichiers physiques.
-                // Si Navidrome tourne dans Docker, les chemins stockés sont des chemins
-                // internes au conteneur → on exécute rm à l'intérieur du conteneur.
-                // Le script retourne DELETED:/MISSING:/FAILED: pour chaque fichier.
-                $innerScript = 'echo ' . $encoded . ' | base64 -d | '
-                    . 'while IFS= read -r f; do '
-                    .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
-                    .   'else echo "MISSING:$f"; fi; '
-                    . 'done';
+                //
+                // Strategy A — music_host_path configured:
+                //   Navidrome is in Docker. Paths in the DB are container-internal
+                //   (e.g. /music/Artist/file.flac). We map them to host paths by
+                //   replacing the container prefix with NAVIDROME_MUSIC_HOST_PATH,
+                //   then run rm directly on the SSH host. No docker exec needed.
+                //
+                // Strategy B — docker_container configured, no music_host_path:
+                //   Run rm inside the container via docker exec (legacy behaviour).
+                //
+                // Strategy C — neither:
+                //   Run rm directly on the SSH host with the paths as-is.
+                //
+                // The script echoes DELETED:/MISSING:/FAILED: per file.
 
-                $container = config('navidrome.docker_container');
-                if ($container) {
+                $musicHostPath      = config('navidrome.music_host_path');
+                $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+                $container          = config('navidrome.docker_container');
+
+                if ($musicHostPath) {
+                    // Strategy A: translate container paths to host paths
+                    $musicHostPath = rtrim($musicHostPath, '/');
+                    $translatedList = implode("\n", array_map(
+                        fn($p) => str_starts_with($p, $containerMusicPath . '/')
+                            ? $musicHostPath . substr($p, strlen($containerMusicPath))
+                            : $p,
+                        array_column($fullPaths, 'path')
+                    ));
+                    $encodedHost  = base64_encode($translatedList);
+                    $innerScript  = 'echo ' . $encodedHost . ' | base64 -d | '
+                        . 'while IFS= read -r f; do '
+                        .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                        .   'else echo "MISSING:$f"; fi; '
+                        . 'done';
+                    $script = $innerScript;
+                } elseif ($container) {
+                    // Strategy B: delete inside Docker container
+                    $innerScript = 'echo ' . $encoded . ' | base64 -d | '
+                        . 'while IFS= read -r f; do '
+                        .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                        .   'else echo "MISSING:$f"; fi; '
+                        . 'done';
                     $script = 'docker exec ' . escapeshellarg($container) . ' sh -c ' . escapeshellarg($innerScript);
                 } else {
+                    // Strategy C: direct SSH host deletion
+                    $innerScript = 'echo ' . $encoded . ' | base64 -d | '
+                        . 'while IFS= read -r f; do '
+                        .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                        .   'else echo "MISSING:$f"; fi; '
+                        . 'done';
                     $script = $innerScript;
                 }
 
                 $result = $nd->sshCommand($script);
 
-                // Parser la sortie ligne par ligne
+                // When using Strategy A (host path), DELETED/MISSING markers use host
+                // paths. Re-map them back to container paths so DB lookup still works.
+                $hostToContainer = [];
+                if ($musicHostPath) {
+                    foreach ($fullPaths as $id => $info) {
+                        $containerPath = $info['path'];
+                        $hostPath = str_starts_with($containerPath, $containerMusicPath . '/')
+                            ? $musicHostPath . substr($containerPath, strlen($containerMusicPath))
+                            : $containerPath;
+                        $hostToContainer[$hostPath] = $containerPath;
+                    }
+                }
+
+                // Parser la sortie ligne par ligne.
+                // Si Strategy A, les chemins dans la sortie sont des chemins HOST.
+                // On les retraduit en chemins conteneur pour matcher $fullPaths (indexé par chemin conteneur).
                 $actualDeleted = [];
                 $missing       = [];
                 $failed        = [];
+                $remap = fn($p) => $hostToContainer[$p] ?? $p;
                 foreach (explode("\n", trim($result['output'] ?? '')) as $line) {
                     $line = trim($line);
-                    if (str_starts_with($line, 'DELETED:')) $actualDeleted[] = substr($line, 8);
-                    elseif (str_starts_with($line, 'MISSING:')) $missing[]   = substr($line, 8);
-                    elseif (str_starts_with($line, 'FAILED:'))  $failed[]    = substr($line, 7);
+                    if (str_starts_with($line, 'DELETED:')) $actualDeleted[] = $remap(substr($line, 8));
+                    elseif (str_starts_with($line, 'MISSING:')) $missing[]   = $remap(substr($line, 8));
+                    elseif (str_starts_with($line, 'FAILED:'))  $failed[]    = $remap(substr($line, 7));
                 }
 
                 if ($result['exitCode'] === 0) {
@@ -667,7 +720,8 @@ class AdminController extends Controller
                         ]);
                     }
                     if (!empty($missing)) {
-                        $errors[] = count($missing) . ' fichier(s) introuvable(s) sur le serveur (déjà supprimés ?)';
+                        $hint = $musicHostPath ? '' : ' — Configurez NAVIDROME_MUSIC_HOST_PATH dans .env si Navidrome est dans Docker';
+                        $errors[] = count($missing) . ' fichier(s) introuvable(s) sur le serveur (chemin : ' . (array_column($fullPaths, 'path')[0] ?? '?') . ')' . $hint;
                     }
                     if (!empty($failed)) {
                         $errors[] = count($failed) . ' suppression(s) échouée(s) (droits ?)';
