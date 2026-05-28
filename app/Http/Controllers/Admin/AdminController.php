@@ -617,10 +617,10 @@ class AdminController extends Controller
         $deleted = 0;
         if (!empty($fullPaths)) {
             try {
-                $encoded = base64_encode(implode("\n", array_column($fullPaths, 'path')));
+                $pathList = implode("\n", array_column($fullPaths, 'path'));
+                $encoded  = base64_encode($pathList);
 
-                // while IFS= read -r handles all special characters correctly
-                // (apostrophes, accents, spaces, parentheses…) unlike xargs -I{} sh -c '…'
+                // 1. Supprimer les fichiers physiques (while IFS= read -r gère apostrophes, accents…)
                 $result = $nd->sshCommand(
                     "echo {$encoded} | base64 -d | while IFS= read -r f; do rm -f \"\$f\" 2>/dev/null; done"
                 );
@@ -634,6 +634,35 @@ class AdminController extends Controller
                             'path'    => $info['path'],
                         ]);
                     }
+
+                    // 2. Supprimer les entrées directement dans la BDD SQLite de Navidrome
+                    //    via docker exec (si configuré) ou sqlite3 direct sur le chemin hôte.
+                    //    Évite d'attendre un scan qui ne nettoie pas les entrées orphelines.
+                    $ids     = array_keys($fullPaths);
+                    $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $ids);
+                    $inList  = "'" . implode("','", $safeIds) . "'";
+                    $sqlStmt = "DELETE FROM media_file WHERE id IN ({$inList});";
+
+                    $container = config('navidrome.docker_container');
+                    $dbPath    = config('navidrome.db_path');
+
+                    if ($container) {
+                        // Navidrome dans Docker — sqlite3 à l'intérieur du conteneur
+                        $ndDbPath = config('navidrome.db_path', '/data/navidrome.db');
+                        $nd->sshCommand(
+                            'docker exec ' . escapeshellarg($container) .
+                            ' sqlite3 ' . escapeshellarg($ndDbPath) .
+                            ' ' . escapeshellarg($sqlStmt)
+                        );
+                    } elseif ($dbPath) {
+                        // sqlite3 direct sur le chemin hôte
+                        $nd->sshCommand(
+                            'sqlite3 ' . escapeshellarg($dbPath) . ' ' . escapeshellarg($sqlStmt)
+                        );
+                    }
+
+                    // Scan léger pour recalculer les compteurs album/artiste
+                    $nd->triggerScan(false);
                 } else {
                     $errors[] = $result['output'];
                 }
@@ -642,12 +671,8 @@ class AdminController extends Controller
             }
         }
 
-        if ($deleted > 0) {
-            $nd->triggerScan(true);
-        }
-
         $msg = $deleted > 0
-            ? "{$deleted} fichier(s) supprimé(s). Le scan Navidrome (complet) a été déclenché."
+            ? "{$deleted} fichier(s) supprimé(s) et retirés de la bibliothèque Navidrome."
             : '';
         if (!empty($errors)) {
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
@@ -655,7 +680,7 @@ class AdminController extends Controller
 
         $redirect = redirect('/admin/duplicates');
         if ($deleted > 0) {
-            $redirect = $redirect->with('success', $msg)->with('scanning', true);
+            $redirect = $redirect->with('success', $msg);
         } else {
             $redirect = $redirect->with('error', $msg ?: 'Aucun fichier à supprimer.');
         }

@@ -6,6 +6,8 @@ return [
     'admin_user' => env('NAVIDROME_ADMIN_USER', 'admin'),
     'admin_password' => env('NAVIDROME_ADMIN_PASSWORD', 'admin'),
     'music_path' => env('NAVIDROME_MUSIC_PATH', '/music'),
+    'docker_container' => env('NAVIDROME_DOCKER_CONTAINER'),
+    'db_path' => env('NAVIDROME_DB_PATH', '/data/navidrome.db'),
     'ssh_host' => env('NAVIDROME_SSH_HOST'),
     'ssh_user' => env('NAVIDROME_SSH_USER', 'root'),
     'ssh_password' => env('NAVIDROME_SSH_PASSWORD'),
