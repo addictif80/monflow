@@ -213,6 +213,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
     Route::get('/newsletters/weekly-preview', [AdminController::class, 'weeklyNewsletterPreview']);
+    Route::match(['get', 'post'], '/newsletters/template', [AdminController::class, 'newsletterTemplate']);
     Route::match(['get', 'post'], '/newsletters/create', [AdminController::class, 'newsletterCreate']);
     Route::match(['get', 'post'], '/newsletters/{id}/edit', [AdminController::class, 'newsletterEdit']);
     Route::post('/newsletters/{id}/send', [AdminController::class, 'newsletterSend']);

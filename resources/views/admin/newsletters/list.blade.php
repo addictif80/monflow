@@ -8,6 +8,7 @@
     </div>
     <div class="flex items-center gap-2">
         <a href="/admin/newsletters/weekly-preview" target="_blank" class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg transition border border-zinc-700">Aperçu de la prochaine</a>
+        <a href="/admin/newsletters/template" class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg transition border border-zinc-700">Modifier le template</a>
         <a href="/admin/newsletters/create" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">+ Nouvelle campagne</a>
     </div>
 </div>
