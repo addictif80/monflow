@@ -474,12 +474,22 @@ class AdminController extends Controller
     // ─── Metadata Management ───
     public function metadata(Request $request, NavidromeService $nd)
     {
-        $songs = [];
-        $q = $request->input('q');
-        if ($q) {
-            try { $songs = $nd->searchSongs($q, 50); } catch (\Exception $e) {}
-        }
-        return view('admin.metadata.index', compact('songs', 'q'));
+        $q       = (string) $request->input('q', '');
+        $page    = max(1, (int) $request->input('page', 1));
+        $perPage = 100;
+        $start   = ($page - 1) * $perPage;
+        $songs   = [];
+        $total   = 0;
+
+        try {
+            $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC', $q);
+            $songs  = $result['data'];
+            $total  = $result['total'];
+        } catch (\Exception $e) {}
+
+        $lastPage = $total > 0 ? (int) ceil($total / $perPage) : 1;
+
+        return view('admin.metadata.index', compact('songs', 'q', 'page', 'perPage', 'total', 'lastPage'));
     }
 
     public function metadataEdit(string $id, NavidromeService $nd)
@@ -509,11 +519,20 @@ class AdminController extends Controller
         $song = $nd->getSong($id);
         $songPath = $song['path'] ?? null;
         if (!$songPath) {
-            return back()->with('error', 'Chemin du fichier audio introuvable.');
+            $err = 'Chemin du fichier audio introuvable.';
+            return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
 
-        $musicPath = config('navidrome.music_path');
-        $fullPath = $musicPath . '/' . ltrim($songPath, '/');
+        // Translate container path to host path (same logic as duplicate delete).
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        if ($musicHostPath && str_starts_with($songPath, $containerMusicPath . '/')) {
+            $fullPath = rtrim($musicHostPath, '/') . substr($songPath, strlen($containerMusicPath));
+        } elseif (str_starts_with($songPath, '/')) {
+            $fullPath = $songPath;
+        } else {
+            $fullPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($songPath, '/');
+        }
 
         $tagMap = [
             'title' => 'title', 'artist' => 'artist', 'albumArtist' => 'album_artist',
@@ -530,7 +549,8 @@ class AdminController extends Controller
         }
 
         if (!$metaArgs) {
-            return back()->with('error', 'Aucune modification.');
+            $err = 'Aucune modification.';
+            return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
 
         $escaped = escapeshellarg($fullPath);
@@ -540,13 +560,21 @@ class AdminController extends Controller
         try {
             $result = $nd->sshCommand($cmd);
             if ($result['exitCode'] !== 0) {
-                return back()->with('error', 'Erreur ffmpeg : ' . $result['output']);
+                $err = 'Erreur ffmpeg : ' . $result['output'];
+                return $request->expectsJson()
+                    ? response()->json(['error' => $err], 422)
+                    : back()->with('error', $err);
             }
             $nd->triggerScan();
             AuditLog::record('metadata.update', null, ['song_id' => $id, 'fields' => array_keys(array_filter($data, fn ($v) => $v !== null && $v !== ''))]);
-            return back()->with('success', 'Metadonnees mises a jour. Scan Navidrome lance.');
+            return $request->expectsJson()
+                ? response()->json(['success' => true])
+                : back()->with('success', 'Metadonnees mises a jour. Scan Navidrome lance.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Erreur : ' . $e->getMessage());
+            $err = 'Erreur : ' . $e->getMessage();
+            return $request->expectsJson()
+                ? response()->json(['error' => $err], 500)
+                : back()->with('error', $err);
         }
     }
 
