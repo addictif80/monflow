@@ -553,8 +553,10 @@ class AdminController extends Controller
             return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
 
+        $ext     = pathinfo($fullPath, PATHINFO_EXTENSION);
+        $tmpFile = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
         $escaped = escapeshellarg($fullPath);
-        $tmpPath = escapeshellarg($fullPath . '.tmp');
+        $tmpPath = escapeshellarg($tmpFile);
         $cmd = "ffmpeg -i {$escaped} -c copy{$metaArgs} -y {$tmpPath} && mv -f {$tmpPath} {$escaped}";
 
         try {
