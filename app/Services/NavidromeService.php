@@ -190,16 +190,46 @@ class NavidromeService
 
     public function getRecentAlbums(int $limit = 10, ?\DateTimeInterface $since = null): array
     {
-        $query = "/album?_end={$limit}&_order=DESC&_sort=createdAt&_start=0";
+        // Navidrome's REST API does not support date range filters, so we fetch
+        // a larger set sorted by createdAt and filter in PHP.
+        $fetch = $since ? 500 : $limit;
+        $albums = $this->request('get', "/album?_end={$fetch}&_order=DESC&_sort=createdAt&_start=0");
         if ($since) {
-            $query .= '&createdAt_gte=' . urlencode($since->format('Y-m-d\TH:i:s\Z'));
+            $sinceTs = $since->getTimestamp();
+            $albums = array_values(array_filter($albums, function ($a) use ($sinceTs) {
+                $created = strtotime($a['createdAt'] ?? '');
+                return $created && $created >= $sinceTs;
+            }));
         }
-        return $this->request('get', $query);
+        return array_slice($albums, 0, $limit);
     }
 
     public function getTopPlayedArtists(int $limit = 5): array
     {
-        return $this->request('get', "/artist?_end={$limit}&_order=DESC&_sort=playCount&_start=0");
+        // The /api/artist endpoint does not expose a sortable playCount field.
+        // Aggregate from top songs instead (songs do sort by playCount correctly).
+        $songs = $this->request('get', "/song?_end=300&_order=DESC&_sort=playCount&_start=0");
+        $artists = [];
+        foreach ($songs as $song) {
+            $pc = (int)($song['playCount'] ?? 0);
+            if ($pc === 0) break;
+            $name = $song['artist'] ?? '';
+            if ($name === '') continue;
+            if (!isset($artists[$name])) {
+                $artists[$name] = ['name' => $name, 'playCount' => 0, 'albumCount' => 0, '_albums' => []];
+            }
+            $artists[$name]['playCount'] += $pc;
+            $albumId = $song['albumId'] ?? null;
+            if ($albumId && !in_array($albumId, $artists[$name]['_albums'])) {
+                $artists[$name]['_albums'][] = $albumId;
+                $artists[$name]['albumCount']++;
+            }
+        }
+        usort($artists, fn($a, $b) => $b['playCount'] - $a['playCount']);
+        return array_map(
+            fn($a) => ['name' => $a['name'], 'playCount' => $a['playCount'], 'albumCount' => $a['albumCount']],
+            array_slice(array_values($artists), 0, $limit)
+        );
     }
 
     public function getTopPlayedSongs(int $limit = 10): array
