@@ -693,9 +693,37 @@ class AdminController extends Controller
     }
 
     // ─── Newsletters ───
+    // ─── Newsletter helpers ───
+
+    private function getNewsletterLayout(): string
+    {
+        return EmailTemplate::where('template_type', 'newsletter_layout')->value('html_body') ?? '{{ content }}';
+    }
+
+    private function applyNewsletterLayout(string $content): string
+    {
+        $layout = $this->getNewsletterLayout();
+        return str_replace('{{ content }}', $content, $layout);
+    }
+
+    // ─── Newsletters ───
+
     public function newsletters()
     {
         return view('admin.newsletters.list', ['newsletters' => Newsletter::latest()->paginate(25)]);
+    }
+
+    public function newsletterTemplate(Request $request)
+    {
+        $tpl = EmailTemplate::firstOrCreate(
+            ['template_type' => 'newsletter_layout'],
+            ['subject' => '', 'html_body' => '{{ content }}', 'is_active' => true]
+        );
+        if ($request->isMethod('post')) {
+            $tpl->update(['html_body' => $request->validate(['html_body' => 'required'])['html_body']]);
+            return back()->with('success', 'Template mis à jour.');
+        }
+        return view('admin.newsletters.template', ['template' => $tpl]);
     }
 
     public function newsletterCreate(Request $request)
@@ -705,7 +733,7 @@ class AdminController extends Controller
             Newsletter::create($data);
             return redirect('/admin/newsletters')->with('success', 'Campagne créée.');
         }
-        return view('admin.newsletters.form', ['newsletter' => null]);
+        return view('admin.newsletters.form', ['newsletter' => null, 'layout' => $this->getNewsletterLayout()]);
     }
 
     public function newsletterEdit(string $id, Request $request)
@@ -716,7 +744,7 @@ class AdminController extends Controller
             $nl->update($request->validate(['subject' => 'required|max:255', 'html_body' => 'required']));
             return redirect('/admin/newsletters')->with('success', 'Campagne mise à jour.');
         }
-        return view('admin.newsletters.form', ['newsletter' => $nl]);
+        return view('admin.newsletters.form', ['newsletter' => $nl, 'layout' => $this->getNewsletterLayout()]);
     }
 
     public function newsletterSend(string $id, EmailService $mail)
@@ -724,13 +752,14 @@ class AdminController extends Controller
         $nl = Newsletter::findOrFail($id);
         if ($nl->status === 'sent') return back()->with('error', 'Déjà envoyée.');
 
+        $fullHtml = $this->applyNewsletterLayout($nl->html_body);
         $nl->update(['status' => 'sending']);
         $recipients = User::where('is_admin', false)->where('status', '!=', 'deleted')->where('newsletter_optin', true)->whereNotNull('email_verified_at')->get();
 
         $sent = 0;
         foreach ($recipients as $user) {
             try {
-                $mail->sendNewsletterNow($user, $nl->subject, $nl->html_body);
+                $mail->sendNewsletterNow($user, $nl->subject, $fullHtml);
                 $sent++;
             } catch (\Exception $e) {
                 Log::error("Newsletter send failed for {$user->email}: {$e->getMessage()}");
@@ -745,7 +774,11 @@ class AdminController extends Controller
     public function newsletterPreview(string $id)
     {
         $nl = Newsletter::findOrFail($id);
-        return response($nl->html_body)->header('Content-Type', 'text/html');
+        $html = $this->applyNewsletterLayout($nl->html_body);
+        foreach (['site_name' => config('app.name'), 'site_url' => config('app.url')] as $k => $v) {
+            $html = str_replace("{{ {$k} }}", $v, $html);
+        }
+        return response($html)->header('Content-Type', 'text/html');
     }
 
     public function weeklyNewsletterPreview(\App\Services\NavidromeService $nd)
