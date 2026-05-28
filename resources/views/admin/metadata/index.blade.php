@@ -83,6 +83,19 @@
                         </div>
                     </div>
                 </div>
+                {{-- Pochette --}}
+                <div class="border-t border-zinc-700/40 pt-3 mt-1">
+                    <div class="flex items-center gap-3 mb-2">
+                        <span class="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Pochette</span>
+                        <button type="button" onclick="searchCover(this)"
+                                class="inline-flex items-center gap-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700 transition">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <span class="cover-search-label">Rechercher</span>
+                        </button>
+                        <span class="cover-status text-xs text-zinc-600"></span>
+                    </div>
+                    <div class="cover-results hidden flex flex-wrap gap-2"></div>
+                </div>
                 <div class="flex items-center gap-3">
                     <button type="button" onclick="saveRow(this)"
                             class="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
@@ -161,6 +174,10 @@ function toggleEdit(btn) {
 }
 
 function closeEditRow(editRow) {
+    // Reset cover section
+    editRow.querySelector('.cover-results').innerHTML = '';
+    editRow.querySelector('.cover-results').classList.add('hidden');
+    editRow.querySelector('.cover-status').textContent = '';
     editRow.classList.add('hidden');
     const id  = editRow.dataset.for;
     const btn = document.querySelector(`.song-row[data-id="${id}"] .edit-toggle-btn`);
@@ -217,6 +234,102 @@ async function saveRow(btn) {
     } finally {
         btn.querySelector('.save-label').classList.remove('opacity-0');
         btn.querySelector('.save-spin').classList.add('hidden');
+        btn.disabled = false;
+    }
+}
+
+async function searchCover(btn) {
+    const editRow = btn.closest('.edit-row');
+    const artist  = editRow.querySelector('[name="artist"]').value.trim();
+    const album   = editRow.querySelector('[name="album"]').value.trim();
+    const title   = editRow.querySelector('[name="title"]').value.trim();
+    const q       = [artist, album || title].filter(Boolean).join(' ');
+
+    const statusEl  = editRow.querySelector('.cover-status');
+    const resultsEl = editRow.querySelector('.cover-results');
+    const labelEl   = btn.querySelector('.cover-search-label');
+
+    labelEl.textContent = 'Recherche…';
+    btn.disabled = true;
+    statusEl.textContent = '';
+    resultsEl.innerHTML = '';
+    resultsEl.classList.add('hidden');
+
+    try {
+        const res  = await fetch('/admin/metadata/search-artwork?q=' + encodeURIComponent(q), {
+            headers: { Accept: 'application/json' }
+        });
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+            statusEl.textContent = 'Aucun résultat.';
+        } else {
+            data.forEach(item => {
+                const img = document.createElement('img');
+                img.src = item.thumb;
+                img.title = item.label;
+                img.className = 'w-14 h-14 rounded-lg object-cover cursor-pointer border-2 border-transparent hover:border-indigo-500 transition cover-thumb';
+                img.dataset.full = item.full;
+                img.addEventListener('click', () => selectCover(img, editRow));
+                resultsEl.appendChild(img);
+            });
+            resultsEl.classList.remove('hidden');
+        }
+    } catch {
+        statusEl.textContent = 'Erreur réseau.';
+    } finally {
+        labelEl.textContent = 'Rechercher';
+        btn.disabled = false;
+    }
+}
+
+function selectCover(img, editRow) {
+    // Highlight selected
+    editRow.querySelectorAll('.cover-thumb').forEach(i => i.classList.remove('border-indigo-500', 'ring-2', 'ring-indigo-500/30'));
+    img.classList.add('border-indigo-500', 'ring-2', 'ring-indigo-500/30');
+    editRow.dataset.selectedCover = img.dataset.full;
+
+    // Show apply button if not already there
+    let applyBtn = editRow.querySelector('.cover-apply-btn');
+    if (!applyBtn) {
+        applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.className = 'cover-apply-btn inline-flex items-center gap-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-2.5 py-1 rounded-lg border border-zinc-600 transition mt-2';
+        applyBtn.innerHTML = '<span class="apply-label">Appliquer cette pochette</span>'
+            + '<svg class="apply-spin hidden w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>';
+        applyBtn.addEventListener('click', () => applyCover(applyBtn, editRow));
+        editRow.querySelector('.cover-results').after(applyBtn);
+    }
+}
+
+async function applyCover(btn, editRow) {
+    const id  = editRow.dataset.for;
+    const url = editRow.dataset.selectedCover;
+    if (!url) return;
+
+    btn.querySelector('.apply-label').classList.add('opacity-0');
+    btn.querySelector('.apply-spin').classList.remove('hidden');
+    btn.disabled = true;
+
+    try {
+        const body = new URLSearchParams({ _token: csrfToken, artwork_url: url });
+        const res  = await fetch(`/admin/metadata/${id}/cover`, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        const json = await res.json();
+
+        if (res.ok && json.success) {
+            showNotif('Pochette mise à jour.', 'success');
+        } else {
+            showNotif(json.error || 'Erreur lors de l\'application.', 'error');
+        }
+    } catch {
+        showNotif('Erreur réseau.', 'error');
+    } finally {
+        btn.querySelector('.apply-label').classList.remove('opacity-0');
+        btn.querySelector('.apply-spin').classList.add('hidden');
         btn.disabled = false;
     }
 }

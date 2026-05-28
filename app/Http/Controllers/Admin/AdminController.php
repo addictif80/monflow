@@ -580,6 +580,89 @@ class AdminController extends Controller
         }
     }
 
+    public function metadataSearchArtwork(Request $request)
+    {
+        $q = trim($request->input('q', ''));
+        if (!$q) return response()->json([]);
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(8)
+                ->get('https://itunes.apple.com/search', [
+                    'term'   => $q,
+                    'entity' => 'album',
+                    'limit'  => 8,
+                ]);
+            $results = collect($res->json('results') ?? [])
+                ->filter(fn ($r) => isset($r['artworkUrl100']))
+                ->map(fn ($r) => [
+                    'thumb' => $r['artworkUrl100'],
+                    'full'  => str_replace('100x100bb', '600x600bb', $r['artworkUrl100']),
+                    'label' => ($r['artistName'] ?? '') . ' — ' . ($r['collectionName'] ?? ''),
+                ])
+                ->values();
+            return response()->json($results);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function metadataCover(string $id, Request $request, NavidromeService $nd)
+    {
+        $data = $request->validate(['artwork_url' => 'required|url|max:500']);
+
+        $song     = $nd->getSong($id);
+        $songPath = $song['path'] ?? null;
+        if (!$songPath) {
+            return response()->json(['error' => 'Fichier introuvable.'], 422);
+        }
+
+        // Translate container path to host path
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        if ($musicHostPath && str_starts_with($songPath, $containerMusicPath . '/')) {
+            $fullPath = rtrim($musicHostPath, '/') . substr($songPath, strlen($containerMusicPath));
+        } elseif (str_starts_with($songPath, '/')) {
+            $fullPath = $songPath;
+        } else {
+            $fullPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($songPath, '/');
+        }
+
+        try {
+            // Download artwork on the Laravel server
+            $imageContent = \Illuminate\Support\Facades\Http::timeout(15)->get($data['artwork_url'])->body();
+            if (!$imageContent) {
+                return response()->json(['error' => 'Impossible de télécharger la pochette.'], 422);
+            }
+
+            // Copy artwork to a temp file on the remote (Synology) server via SCP
+            $tmpCover = '/tmp/mf_cover_' . $id . '.jpg';
+            $nd->sshWriteFile($tmpCover, $imageContent);
+
+            // Build ffmpeg command to embed cover art (works for MP3 and FLAC)
+            $ext      = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+            $tmpSong  = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
+            $eSong    = escapeshellarg($fullPath);
+            $eTmp     = escapeshellarg($tmpSong);
+            $eCover   = escapeshellarg($tmpCover);
+
+            $cmd = "ffmpeg -i {$eSong} -i {$eCover} -map 0:a -map 1:v -c:a copy -c:v copy"
+                 . " -id3v2_version 3 -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)'"
+                 . " -y {$eTmp} && mv -f {$eTmp} {$eSong} && rm -f {$eCover}";
+
+            $result = $nd->sshCommand($cmd);
+            if ($result['exitCode'] !== 0) {
+                $nd->sshCommand("rm -f {$eCover}");
+                return response()->json(['error' => 'Erreur ffmpeg : ' . $result['output']], 422);
+            }
+
+            $nd->triggerScan();
+            AuditLog::record('metadata.cover', null, ['song_id' => $id]);
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     // ─── Duplicate Management ───
     public function duplicates(Request $request, NavidromeService $nd)
     {
