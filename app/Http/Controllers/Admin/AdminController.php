@@ -760,6 +760,13 @@ class AdminController extends Controller
 
         $html = \App\Console\Commands\SendWeeklyNewMusic::buildEmail($albums, $topArtists);
 
+        // Replace template variables the same way EmailService does
+        $ctx = ['site_name' => config('app.name'), 'site_url' => config('app.url')];
+        foreach ($ctx as $k => $v) {
+            $html = str_replace("{{ {$k} }}", $v, $html);
+            $html = str_replace("{{{$k}}}", $v, $html);
+        }
+
         $subscriberCount = \App\Models\User::where('is_admin', false)
             ->where('status', '!=', 'deleted')
             ->where('newsletter_optin', true)
