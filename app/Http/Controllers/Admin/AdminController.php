@@ -581,40 +581,40 @@ class AdminController extends Controller
 
     public function duplicateBatchDelete(Request $request, NavidromeService $nd)
     {
-        $ids = $request->input('ids', []);
+        $ids    = $request->input('ids', []);
+        $paths  = $request->input('paths', []);
+        $titles = $request->input('titles', []);
+
         if (empty($ids)) {
-            return back()->with('error', 'Aucun fichier selectionne.');
+            return back()->with('error', 'Aucun fichier sélectionné.');
         }
 
+        // paths[] and ids[] are submitted together from the view — no need to
+        // re-fetch each song individually from Navidrome (avoids N×HTTP timeouts).
         $musicPath = config('navidrome.music_path');
-        $deleted = 0;
-        $errors = [];
-        $paths = [];
-        $songs = [];
+        $fullPaths = [];
+        $errors    = [];
 
-        foreach ($ids as $id) {
-            try {
-                $song = $nd->getSong($id);
-                $songPath = $song['path'] ?? null;
-                if (!$songPath) {
-                    $errors[] = "{$song['title']} : chemin introuvable";
-                    continue;
-                }
-                $fullPath = $musicPath . '/' . ltrim($songPath, '/');
-                $paths[] = $fullPath;
-                $songs[$id] = ['title' => $song['title'] ?? '', 'path' => $fullPath];
-            } catch (\Exception $e) {
-                $errors[] = "ID {$id} : {$e->getMessage()}";
+        foreach ($ids as $i => $id) {
+            $songPath = $paths[$i] ?? null;
+            if (!$songPath) {
+                $errors[] = ($titles[$i] ?? "ID {$id}") . ' : chemin manquant';
+                continue;
             }
+            $fullPaths[$id] = [
+                'path'  => $musicPath . '/' . ltrim($songPath, '/'),
+                'title' => $titles[$i] ?? '',
+            ];
         }
 
-        if (!empty($paths)) {
+        $deleted = 0;
+        if (!empty($fullPaths)) {
             try {
-                $encoded = base64_encode(implode("\n", $paths));
-                $result = $nd->sshCommand("echo {$encoded} | base64 -d | tr '\\n' '\\0' | xargs -0 rm -f");
+                $encoded = base64_encode(implode("\n", array_column($fullPaths, 'path')));
+                $result  = $nd->sshCommand("echo {$encoded} | base64 -d | tr '\\n' '\\0' | xargs -0 rm -f");
                 if ($result['exitCode'] === 0) {
-                    $deleted = count($paths);
-                    foreach ($songs as $id => $info) {
+                    $deleted = count($fullPaths);
+                    foreach ($fullPaths as $id => $info) {
                         AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $info['title'], 'path' => $info['path']]);
                     }
                 } else {
@@ -629,7 +629,9 @@ class AdminController extends Controller
             $nd->triggerScan(true);
         }
 
-        $msg = $deleted > 0 ? "{$deleted} fichier(s) supprime(s). Le scan complet Navidrome est en cours, patientez quelques instants avant de rescanner." : '';
+        $msg = $deleted > 0
+            ? "{$deleted} fichier(s) supprimé(s). Le scan Navidrome est en cours, patientez quelques instants avant de rescanner."
+            : '';
         if (!empty($errors)) {
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
         }
