@@ -557,7 +557,8 @@ class AdminController extends Controller
         $tmpFile = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
         $escaped = escapeshellarg($fullPath);
         $tmpPath = escapeshellarg($tmpFile);
-        $cmd = "ffmpeg -i {$escaped} -c copy{$metaArgs} -y {$tmpPath} && mv -f {$tmpPath} {$escaped}";
+        // sh -c wrapper ensures sudo covers ffmpeg + mv as a unit
+        $cmd = 'sh -c ' . escapeshellarg("ffmpeg -i {$escaped} -c copy{$metaArgs} -y {$tmpPath} && mv -f {$tmpPath} {$escaped}");
 
         try {
             $result = $nd->sshCommand($cmd);
@@ -675,19 +676,22 @@ class AdminController extends Controller
                 }
             }
 
-            // Build ffmpeg command to embed cover art (works for MP3 and FLAC)
-            $ext      = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
-            $tmpSong  = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
-            $eSong    = escapeshellarg($fullPath);
-            $eTmp     = escapeshellarg($tmpSong);
+            // Build ffmpeg command to embed cover art (works for MP3 and FLAC).
+            // Wrapped in sh -c so that sudo applies to ffmpeg + mv + rm as a unit —
+            // without this, only ffmpeg runs as root; mv/rm fail on root-owned files.
+            $ext     = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+            $tmpSong = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
+            $eSong   = escapeshellarg($fullPath);
+            $eTmp    = escapeshellarg($tmpSong);
 
-            $cmd = "ffmpeg -i {$eSong} -i {$eCover} -map 0:a -map 1:v -c:a copy -c:v copy"
-                 . " -id3v2_version 3 -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)'"
-                 . " -y {$eTmp} && mv -f {$eTmp} {$eSong} && rm -f {$eCover}";
+            $inner = "ffmpeg -i {$eSong} -i {$eCover} -map 0:a -map 1:v -c:a copy -c:v copy"
+                   . " -id3v2_version 3 -disposition:v:0 attached_pic"
+                   . " -y {$eTmp} && mv -f {$eTmp} {$eSong} && rm -f {$eCover}";
+            $cmd = 'sh -c ' . escapeshellarg($inner);
 
             $result = $nd->sshCommand($cmd);
             if ($result['exitCode'] !== 0) {
-                $nd->sshCommand("rm -f {$eCover}");
+                $nd->sshCommand('sh -c ' . escapeshellarg("rm -f {$eCover}"));
                 return response()->json(['error' => 'Erreur ffmpeg : ' . $result['output']], 422);
             }
 
