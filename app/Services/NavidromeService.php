@@ -188,9 +188,13 @@ class NavidromeService
         return $this->request('get', "/song/{$id}");
     }
 
-    public function getRecentAlbums(int $limit = 10): array
+    public function getRecentAlbums(int $limit = 10, ?\DateTimeInterface $since = null): array
     {
-        return $this->request('get', "/album?_end={$limit}&_order=DESC&_sort=createdAt&_start=0");
+        $query = "/album?_end={$limit}&_order=DESC&_sort=createdAt&_start=0";
+        if ($since) {
+            $query .= '&createdAt_gte=' . urlencode($since->format('Y-m-d\TH:i:s\Z'));
+        }
+        return $this->request('get', $query);
     }
 
     public function getTopPlayedArtists(int $limit = 5): array

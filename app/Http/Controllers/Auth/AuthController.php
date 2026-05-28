@@ -14,7 +14,7 @@ class AuthController extends Controller
 {
     public function showLogin()
     {
-        if (Auth::check()) return redirect(Auth::user()->is_admin ? '/admin' : '/portal');
+        if (Auth::check()) return redirect()->intended(Auth::user()->is_admin ? '/admin' : '/portal');
         return view('auth.login');
     }
 
@@ -35,9 +35,9 @@ class AuthController extends Controller
         }
 
         Auth::login($user, $request->boolean('remember'));
-        if ($user->is_admin) return redirect('/admin');
-        if ($user->activeSubscription) return redirect('/player');
-        return redirect('/portal');
+        if ($user->is_admin) return redirect()->intended('/admin');
+        if ($user->activeSubscription) return redirect()->intended('/player');
+        return redirect()->intended('/portal');
     }
 
     public function showRegister() { return view('auth.register'); }

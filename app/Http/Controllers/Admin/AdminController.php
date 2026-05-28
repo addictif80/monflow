@@ -748,6 +748,34 @@ class AdminController extends Controller
         return response($nl->html_body)->header('Content-Type', 'text/html');
     }
 
+    public function weeklyNewsletterPreview(\App\Services\NavidromeService $nd)
+    {
+        try {
+            $albums    = $nd->getRecentAlbums(10, now()->subDays(7));
+            $topArtists = $nd->getTopPlayedArtists(5);
+        } catch (\Exception $e) {
+            return response("<pre>Erreur Navidrome : " . htmlspecialchars($e->getMessage()) . "</pre>")
+                ->header('Content-Type', 'text/html');
+        }
+
+        $html = \App\Console\Commands\SendWeeklyNewMusic::buildEmail($albums, $topArtists);
+
+        $subscriberCount = \App\Models\User::where('is_admin', false)
+            ->where('status', '!=', 'deleted')
+            ->where('newsletter_optin', true)
+            ->whereNotNull('email_verified_at')
+            ->count();
+
+        $newAlbumCount = count($albums);
+        $banner = "<div style='font-family:sans-serif;background:#1e1b4b;color:#a5b4fc;padding:10px 16px;font-size:13px;border-bottom:2px solid #4f46e5'>"
+            . "⚡ Aperçu — données en temps réel · <strong>{$newAlbumCount}</strong> album(s) ajouté(s) cette semaine · "
+            . "<strong>{$subscriberCount}</strong> destinataire(s) · "
+            . now()->format('d/m/Y H:i')
+            . "</div>";
+
+        return response($banner . $html)->header('Content-Type', 'text/html');
+    }
+
     // ─── Impersonate ───
 
     public function impersonate(string $id, Request $request)
