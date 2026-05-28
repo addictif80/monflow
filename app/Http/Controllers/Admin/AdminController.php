@@ -416,37 +416,86 @@ class AdminController extends Controller
     // ─── Lyrics Management ───
     public function lyrics(Request $request, NavidromeService $nd)
     {
-        $songs = [];
-        $q = $request->input('q');
-        if ($q) {
-            try { $songs = $nd->searchSongs($q, 50); } catch (\Exception $e) {}
+        $q       = (string) $request->input('q', '');
+        $page    = max(1, (int) $request->input('page', 1));
+        $perPage = 100;
+        $start   = ($page - 1) * $perPage;
+        $songs   = [];
+        $total   = 0;
+
+        try {
+            $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC', $q);
+            $songs  = $result['data'];
+            $total  = $result['total'];
+        } catch (\Exception $e) {}
+
+        // Build host LRC paths and batch-check existence
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        $lrcPathMap = [];
+        foreach ($songs as $song) {
+            $path = $song['path'] ?? null;
+            if (!$path) continue;
+            if ($musicHostPath && str_starts_with($path, $containerMusicPath . '/')) {
+                $hostPath = rtrim($musicHostPath, '/') . substr($path, strlen($containerMusicPath));
+            } elseif (str_starts_with($path, '/')) {
+                $hostPath = $path;
+            } else {
+                $hostPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($path, '/');
+            }
+            $lrcPathMap[$song['id']] = preg_replace('/\.[^.]+$/', '.lrc', $hostPath);
         }
-        return view('admin.lyrics.index', compact('songs', 'q'));
+
+        $existingLrc = [];
+        if (!empty($lrcPathMap)) {
+            try { $existingLrc = $nd->batchCheckLrc(array_values($lrcPathMap)); } catch (\Exception $e) {}
+        }
+
+        foreach ($songs as &$song) {
+            $lrcPath = $lrcPathMap[$song['id']] ?? null;
+            $song['hasLyrics'] = $lrcPath !== null && in_array($lrcPath, $existingLrc);
+        }
+        unset($song);
+
+        $lastPage = $total > 0 ? (int) ceil($total / $perPage) : 1;
+        return view('admin.lyrics.index', compact('songs', 'q', 'page', 'perPage', 'total', 'lastPage'));
     }
 
-    public function lyricsEdit(string $id, NavidromeService $nd)
+    public function lyricsGet(string $id, NavidromeService $nd)
     {
-        $song = $nd->getSong($id);
-        $lrcContent = $nd->getLyricsBySongId($id) ?? '';
-        return view('admin.lyrics.edit', compact('song', 'lrcContent'));
+        $lrc = $nd->getLyricsBySongId($id) ?? '';
+        return response()->json(['lrc' => $lrc]);
     }
 
     public function lyricsSave(string $id, Request $request, NavidromeService $nd)
     {
-        $song = $nd->getSong($id);
+        $song       = $nd->getSong($id);
         $lrcContent = $request->input('lrc_content', '');
+        $songPath   = $song['path'] ?? null;
 
-        $musicPath = config('navidrome.music_path');
-        $songPath = $song['path'] ?? null;
         if (!$songPath) {
-            return back()->with('error', 'Chemin du fichier audio introuvable.');
+            $err = 'Chemin du fichier audio introuvable.';
+            return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
-        $lrcPath = preg_replace('/\.[^.]+$/', '.lrc', $musicPath . '/' . ltrim($songPath, '/'));
+
+        // Translate container path to host path
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        if ($musicHostPath && str_starts_with($songPath, $containerMusicPath . '/')) {
+            $fullPath = rtrim($musicHostPath, '/') . substr($songPath, strlen($containerMusicPath));
+        } elseif (str_starts_with($songPath, '/')) {
+            $fullPath = $songPath;
+        } else {
+            $fullPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($songPath, '/');
+        }
+
+        $lrcPath = preg_replace('/\.[^.]+$/', '.lrc', $fullPath);
 
         try {
-            $result = $nd->sshWriteFile($lrcPath, $lrcContent);
+            $result = $nd->writeLrcViaSSH($lrcPath, $lrcContent);
             if ($result['exitCode'] !== 0) {
-                return back()->with('error', 'Erreur ecriture LRC : ' . $result['output']);
+                $err = 'Erreur écriture LRC : ' . $result['output'];
+                return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
             }
             $nd->triggerScan();
         } catch (\RuntimeException $e) {
@@ -456,7 +505,90 @@ class AdminController extends Controller
         }
 
         AuditLog::record('lyrics.save', null, ['song_id' => $id, 'title' => $song['title'] ?? '']);
-        return back()->with('success', 'Paroles enregistrees. Un scan Navidrome a ete lance.');
+        return $request->expectsJson()
+            ? response()->json(['success' => true])
+            : back()->with('success', 'Paroles enregistrées. Un scan Navidrome a été lancé.');
+    }
+
+    public function lyricsDownload(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $params = ['track_name' => $song['title'] ?? '', 'artist_name' => $song['artist'] ?? ''];
+        if (!empty($song['album']))    $params['album_name'] = $song['album'];
+        if (!empty($song['duration'])) $params['duration']   = (int) $song['duration'];
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(10)
+                ->get('https://lrclib.net/api/get', $params);
+            if ($res->status() === 404) {
+                return response()->json(['error' => 'Paroles introuvables sur LRCLIB.'], 404);
+            }
+            $res->throw();
+            $data = $res->json();
+            $lrc  = $data['syncedLyrics'] ?? $data['plainLyrics'] ?? null;
+            if (!$lrc) {
+                return response()->json(['error' => 'Aucune parole disponible sur LRCLIB.'], 404);
+            }
+            return response()->json(['lrc' => $lrc, 'synced' => !empty($data['syncedLyrics'])]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function lyricsMissing(NavidromeService $nd)
+    {
+        $missing            = [];
+        $start              = 0;
+        $perPage            = 500;
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+
+        do {
+            try {
+                $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC');
+                $page   = $result['data'];
+                $total  = $result['total'];
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+
+            $lrcPathMap = [];
+            foreach ($page as $song) {
+                $path = $song['path'] ?? null;
+                if (!$path) continue;
+                if ($musicHostPath && str_starts_with($path, $containerMusicPath . '/')) {
+                    $hostPath = rtrim($musicHostPath, '/') . substr($path, strlen($containerMusicPath));
+                } elseif (str_starts_with($path, '/')) {
+                    $hostPath = $path;
+                } else {
+                    $hostPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($path, '/');
+                }
+                $lrcPathMap[$song['id']] = preg_replace('/\.[^.]+$/', '.lrc', $hostPath);
+            }
+
+            $existingLrc = [];
+            if (!empty($lrcPathMap)) {
+                try { $existingLrc = $nd->batchCheckLrc(array_values($lrcPathMap)); } catch (\Exception $e) {}
+            }
+
+            foreach ($page as $song) {
+                $lrcPath = $lrcPathMap[$song['id']] ?? null;
+                if (!$lrcPath || !in_array($lrcPath, $existingLrc)) {
+                    $missing[] = ['id' => $song['id'], 'title' => $song['title'] ?? '', 'artist' => $song['artist'] ?? '', 'album' => $song['album'] ?? ''];
+                }
+            }
+
+            $start += $perPage;
+        } while (count($page) === $perPage && $start < $total);
+
+        return response()->json($missing);
+    }
+
+    public function lyricsEdit(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $lrcContent = $nd->getLyricsBySongId($id) ?? '';
+        return view('admin.lyrics.edit', compact('song', 'lrcContent'));
     }
 
     public function lyricsStream(string $id, NavidromeService $nd)

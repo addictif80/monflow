@@ -484,6 +484,25 @@ class NavidromeService
         }
     }
 
+    public function batchCheckLrc(array $hostPaths): array
+    {
+        if (empty($hostPaths)) return [];
+        $parts = implode(' ', array_map('escapeshellarg', $hostPaths));
+        $inner = "for f in {$parts}; do [ -f \"\$f\" ] && echo \"\$f\"; done";
+        $result = $this->sshCommand('sh -c ' . escapeshellarg($inner));
+        if (empty(trim($result['output']))) return [];
+        return array_values(array_filter(array_map('trim', explode("\n", $result['output']))));
+    }
+
+    public function writeLrcViaSSH(string $hostPath, string $content): array
+    {
+        $b64     = base64_encode($content);
+        $escaped = escapeshellarg($hostPath);
+        $dir     = escapeshellarg(dirname($hostPath));
+        $inner   = "mkdir -p {$dir} && printf '%s' " . escapeshellarg($b64) . " | base64 -d > {$escaped}";
+        return $this->sshCommand('sh -c ' . escapeshellarg($inner));
+    }
+
     public function testConnection(): array
     {
         try {

@@ -197,6 +197,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Lyrics management
     Route::get('/lyrics', [AdminController::class, 'lyrics']);
+    Route::get('/lyrics/missing', [AdminController::class, 'lyricsMissing']);
+    Route::get('/lyrics/{id}/get', [AdminController::class, 'lyricsGet']);
+    Route::get('/lyrics/{id}/download', [AdminController::class, 'lyricsDownload']);
     Route::get('/lyrics/{id}/edit', [AdminController::class, 'lyricsEdit']);
     Route::post('/lyrics/{id}/save', [AdminController::class, 'lyricsSave']);
     Route::get('/lyrics/{id}/stream', [AdminController::class, 'lyricsStream']);
