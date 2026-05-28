@@ -401,7 +401,7 @@ class AdminController extends Controller
     }
 
     public function emailTemplates() { return view('admin.settings.email-templates', ['templates' => EmailTemplate::all()]); }
-    public function emailTemplateEdit(string $id = null, Request $request)
+    public function emailTemplateEdit(Request $request, ?string $id = null)
     {
         $tpl = $id ? EmailTemplate::findOrFail($id) : null;
         if ($request->isMethod('post')) {
