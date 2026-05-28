@@ -73,6 +73,30 @@ class NavidromeService
         return $response->json() ?? [];
     }
 
+    private function requestPaginated(string $endpoint): array
+    {
+        if (!$this->token) {
+            $this->authenticate();
+        }
+
+        $doRequest = fn () => Http::timeout(30)
+            ->withHeaders(['x-nd-authorization' => "Bearer {$this->token}", 'Cache-Control' => 'no-cache'])
+            ->get("{$this->baseUrl}/api{$endpoint}");
+
+        $response = retry(3, $doRequest, fn ($a) => $a * 1000, fn ($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
+
+        if ($response->status() === 401) {
+            $this->authenticate();
+            $response = retry(3, $doRequest, fn ($a) => $a * 1000, fn ($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
+        }
+
+        $response->throw();
+        return [
+            'data'  => $response->json() ?? [],
+            'total' => (int) ($response->header('X-Total-Count') ?? 0),
+        ];
+    }
+
     public function createUser(string $username, string $password, string $name = '', string $email = ''): array
     {
         $data = $this->request('post', '/user', [
@@ -270,6 +294,15 @@ class NavidromeService
             $query .= '&' . urlencode($k) . '=' . urlencode($v);
         }
         return $this->request('get', "/song?{$query}");
+    }
+
+    public function getAllSongsPaginated(int $start, int $perPage, string $sort = 'title', string $order = 'ASC', string $search = ''): array
+    {
+        $query = "_start={$start}&_end=" . ($start + $perPage) . "&_order={$order}&_sort={$sort}";
+        if ($search !== '') {
+            $query .= '&title_like=' . urlencode($search);
+        }
+        return $this->requestPaginated("/song?{$query}");
     }
 
     public function triggerScan(bool $full = false): void
