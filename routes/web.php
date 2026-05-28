@@ -117,6 +117,15 @@ Route::middleware('auth')->group(function () {
     // Account deletion
     Route::match(['get', 'post'], '/portal/delete-account', [DashboardController::class, 'deleteAccount']);
 
+    // Top songs (server-side, toutes écoutes confondues)
+    Route::get('/player/top-songs', function (\App\Services\NavidromeService $nd) {
+        try {
+            return response()->json($nd->getTopPlayedSongs(20));
+        } catch (\Exception $e) {
+            return response()->json([], 500);
+        }
+    });
+
     // Web player — réservé aux abonnés actifs (et admins)
     Route::get('/player', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
@@ -203,6 +212,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
+    Route::get('/newsletters/weekly-preview', [AdminController::class, 'weeklyNewsletterPreview']);
     Route::match(['get', 'post'], '/newsletters/create', [AdminController::class, 'newsletterCreate']);
     Route::match(['get', 'post'], '/newsletters/{id}/edit', [AdminController::class, 'newsletterEdit']);
     Route::post('/newsletters/{id}/send', [AdminController::class, 'newsletterSend']);

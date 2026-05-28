@@ -1017,19 +1017,16 @@ async function loadWeekArtists() {
 async function loadWeekSongs() {
     viewTitle.textContent = 'Classement des titres';
     mainArea.innerHTML = '<div class="text-zinc-500 text-center py-10">Chargement…</div>';
-    const resp = await ndCall('getAlbumList2.view', { type: 'frequent', size: 20 });
-    const albums = resp.albumList2?.album || [];
-    if (!albums.length) { mainArea.innerHTML = '<div class="text-zinc-500 text-center py-10">Aucune donnée d\'écoute disponible.</div>'; viewCount.textContent = ''; return; }
-    const allSongs = [];
-    for (const al of albums.slice(0, 10)) {
-        try {
-            const r = await ndCall('getAlbum.view', { id: al.id });
-            const songs = r.album?.song || [];
-            songs.forEach(s => { if (s.playCount > 0) allSongs.push(s); });
-        } catch(e) {}
+    let topSongs = [];
+    try {
+        const r = await fetch('/player/top-songs', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!r.ok) throw new Error('server error');
+        const data = await r.json();
+        topSongs = (Array.isArray(data) ? data : []).filter(s => (s.playCount || 0) > 0);
+    } catch(e) {
+        mainArea.innerHTML = '<div class="text-zinc-500 text-center py-10">Impossible de charger le classement.</div>';
+        return;
     }
-    allSongs.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-    const topSongs = allSongs.slice(0, 20);
     viewCount.textContent = `${topSongs.length} titres`;
     if (!topSongs.length) { mainArea.innerHTML = '<div class="text-zinc-500 text-center py-10">Aucun titre écouté pour le moment.</div>'; return; }
     const container = document.createElement('div');
