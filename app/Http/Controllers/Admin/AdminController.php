@@ -621,13 +621,21 @@ class AdminController extends Controller
                 $encoded  = base64_encode($pathList);
 
                 // 1. Supprimer les fichiers physiques.
-                // Le script retourne "deleted=N missing=M" pour savoir combien existaient réellement.
-                // while IFS= read -r gère apostrophes, accents, espaces, parenthèses…
-                $script = 'echo ' . $encoded . ' | base64 -d | '
+                // Si Navidrome tourne dans Docker, les chemins stockés sont des chemins
+                // internes au conteneur → on exécute rm à l'intérieur du conteneur.
+                // Le script retourne DELETED:/MISSING:/FAILED: pour chaque fichier.
+                $innerScript = 'echo ' . $encoded . ' | base64 -d | '
                     . 'while IFS= read -r f; do '
                     .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
                     .   'else echo "MISSING:$f"; fi; '
                     . 'done';
+
+                $container = config('navidrome.docker_container');
+                if ($container) {
+                    $script = 'docker exec ' . escapeshellarg($container) . ' sh -c ' . escapeshellarg($innerScript);
+                } else {
+                    $script = $innerScript;
+                }
 
                 $result = $nd->sshCommand($script);
 
