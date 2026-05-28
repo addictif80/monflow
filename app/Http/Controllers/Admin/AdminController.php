@@ -539,7 +539,7 @@ class AdminController extends Controller
     {
         $missing            = [];
         $start              = 0;
-        $perPage            = 500;
+        $perPage            = 2000;
         $musicHostPath      = config('navidrome.music_host_path');
         $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
 
@@ -579,6 +579,9 @@ class AdminController extends Controller
             }
 
             $start += $perPage;
+            if (count($page) === $perPage && $start < $total) {
+                usleep(300000); // 300 ms between pages to avoid rate limiting
+            }
         } while (count($page) === $perPage && $start < $total);
 
         return response()->json($missing);

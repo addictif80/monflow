@@ -90,6 +90,13 @@ class NavidromeService
             $response = retry(3, $doRequest, fn ($a) => $a * 1000, fn ($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
         }
 
+        // Back off and retry once on rate-limit
+        if ($response->status() === 429) {
+            $retryAfter = (int) ($response->header('Retry-After') ?? 2);
+            sleep(max(1, $retryAfter));
+            $response = retry(3, $doRequest, fn ($a) => $a * 2000, fn ($e) => $e instanceof \Illuminate\Http\Client\ConnectionException);
+        }
+
         $response->throw();
         return [
             'data'  => $response->json() ?? [],
