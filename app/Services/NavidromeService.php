@@ -345,7 +345,8 @@ class NavidromeService
     private function sudoPrefix(): string
     {
         $sudoPass = config('navidrome.sudo_password') ?: config('navidrome.ssh_password');
-        return 'echo ' . escapeshellarg($sudoPass) . ' | sudo -S';
+        // Preserve PATH so sudo can find docker/sqlite3 not in the restricted sudo PATH
+        return 'echo ' . escapeshellarg($sudoPass) . ' | sudo -S env PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
     }
 
     public function sshCommand(string $cmd): array
