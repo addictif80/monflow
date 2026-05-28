@@ -222,6 +222,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Audit logs
     Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
+    Route::get('/logs', [AdminController::class, 'serverLogs']);
 
     // Settings
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);
