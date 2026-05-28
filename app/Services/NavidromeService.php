@@ -261,6 +261,18 @@ class NavidromeService
         return $this->request('get', "/song?_end={$limit}&_order=DESC&_sort=playCount&_start=0");
     }
 
+    public function getCoverArt(string $id, int $size = 300): \Illuminate\Http\Client\Response
+    {
+        $salt  = bin2hex(random_bytes(6));
+        $token = md5($this->adminPassword . $salt);
+        $url   = rtrim(config('navidrome.public_url'), '/') . '/rest/getCoverArt.view?' . http_build_query([
+            'u' => $this->adminUser, 't' => $token, 's' => $salt,
+            'v' => '1.16.1', 'c' => 'MonFlowAdmin', 'f' => 'json',
+            'id' => $id, 'size' => $size,
+        ]);
+        return Http::timeout(10)->get($url);
+    }
+
     public function streamSong(string $id): \Illuminate\Http\Client\Response
     {
         $salt = bin2hex(random_bytes(6));
