@@ -617,10 +617,10 @@ class AdminController extends Controller
         $deleted = 0;
         if (!empty($fullPaths)) {
             try {
-                $encoded = base64_encode(implode("\n", array_column($fullPaths, 'path')));
+                $pathList = implode("\n", array_column($fullPaths, 'path'));
+                $encoded  = base64_encode($pathList);
 
-                // while IFS= read -r handles all special characters correctly
-                // (apostrophes, accents, spaces, parentheses…) unlike xargs -I{} sh -c '…'
+                // 1. Supprimer les fichiers physiques (while IFS= read -r gère apostrophes, accents…)
                 $result = $nd->sshCommand(
                     "echo {$encoded} | base64 -d | while IFS= read -r f; do rm -f \"\$f\" 2>/dev/null; done"
                 );
@@ -634,6 +634,30 @@ class AdminController extends Controller
                             'path'    => $info['path'],
                         ]);
                     }
+
+                    // 2. Supprimer les entrées directement dans la BDD SQLite de Navidrome
+                    //    (évite d'attendre un scan complet qui peut ne pas nettoyer les entrées orphelines)
+                    $dbPath = config('navidrome.db_path');
+                    if ($dbPath) {
+                        $ids = array_keys($fullPaths);
+                        // Construit la liste d'IDs en base64 pour éviter tout problème de quoting
+                        $idsEncoded = base64_encode(implode("\n", $ids));
+                        $sql = "DELETE FROM media_file WHERE id IN (" .
+                               implode(',', array_fill(0, count($ids), '?')) . ")";
+                        // Passe chaque ID comme argument positionnel via printf + sqlite3
+                        $placeholders = implode(' ', array_fill(0, count($ids), "'%s'"));
+                        $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $ids);
+                        $inList  = "'" . implode("','", $safeIds) . "'";
+                        $nd->sshCommand(
+                            "sqlite3 " . escapeshellarg($dbPath) .
+                            " \"DELETE FROM media_file WHERE id IN ({$inList});\""
+                        );
+                        // Déclenche aussi un scan léger pour mettre à jour les comptes d'albums/artistes
+                        $nd->triggerScan(false);
+                    } else {
+                        // Pas de chemin BDD configuré → scan complet en fallback
+                        $nd->triggerScan(true);
+                    }
                 } else {
                     $errors[] = $result['output'];
                 }
@@ -642,12 +666,8 @@ class AdminController extends Controller
             }
         }
 
-        if ($deleted > 0) {
-            $nd->triggerScan(true);
-        }
-
         $msg = $deleted > 0
-            ? "{$deleted} fichier(s) supprimé(s). Le scan Navidrome (complet) a été déclenché."
+            ? "{$deleted} fichier(s) supprimé(s) et retirés de la bibliothèque Navidrome."
             : '';
         if (!empty($errors)) {
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
@@ -655,7 +675,7 @@ class AdminController extends Controller
 
         $redirect = redirect('/admin/duplicates');
         if ($deleted > 0) {
-            $redirect = $redirect->with('success', $msg)->with('scanning', true);
+            $redirect = $redirect->with('success', $msg);
         } else {
             $redirect = $redirect->with('error', $msg ?: 'Aucun fichier à supprimer.');
         }
