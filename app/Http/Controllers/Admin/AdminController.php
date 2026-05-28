@@ -661,22 +661,25 @@ class AdminController extends Controller
         }
 
         try {
-            // Download artwork on the Laravel server
-            $imageContent = \Illuminate\Support\Facades\Http::timeout(15)->get($data['artwork_url'])->body();
-            if (!$imageContent) {
-                return response()->json(['error' => 'Impossible de télécharger la pochette.'], 422);
-            }
-
-            // Copy artwork to a temp file on the remote (Synology) server via SCP
             $tmpCover = '/tmp/mf_cover_' . $id . '.jpg';
-            $nd->sshWriteFile($tmpCover, $imageContent);
+            $eCover   = escapeshellarg($tmpCover);
+            $eUrl     = escapeshellarg($data['artwork_url']);
+
+            // Let the Synology download the artwork directly — avoids SCP entirely.
+            // curl is available on Synology DSM; wget is the fallback.
+            $download = $nd->sshCommand("curl -sS -L --max-time 20 -o {$eCover} {$eUrl}");
+            if ($download['exitCode'] !== 0) {
+                $download = $nd->sshCommand("wget -q -O {$eCover} {$eUrl}");
+                if ($download['exitCode'] !== 0) {
+                    return response()->json(['error' => 'Impossible de télécharger la pochette sur le Synology : ' . $download['output']], 422);
+                }
+            }
 
             // Build ffmpeg command to embed cover art (works for MP3 and FLAC)
             $ext      = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
             $tmpSong  = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
             $eSong    = escapeshellarg($fullPath);
             $eTmp     = escapeshellarg($tmpSong);
-            $eCover   = escapeshellarg($tmpCover);
 
             $cmd = "ffmpeg -i {$eSong} -i {$eCover} -map 0:a -map 1:v -c:a copy -c:v copy"
                  . " -id3v2_version 3 -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)'"
