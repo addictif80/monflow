@@ -74,7 +74,7 @@ class EmailService
     public function sendNewsletterNow(User $u, string $subject, string $htmlBody): void
     {
         $smtp = $this->getSmtp();
-        $ctx = ['username' => $u->username, 'first_name' => $u->first_name, 'site_name' => config('app.name'), 'site_url' => config('app.url')];
+        $ctx = ['username' => $u->username, 'first_name' => $u->first_name, 'site_name' => config('app.name'), 'site_url' => config('app.url'), 'sujet' => $subject];
         $renderedSubject = $this->render($subject, $ctx);
         $renderedBody = $this->render($htmlBody, $ctx);
         $unsubLink = config('app.url') . '/portal/profile';
