@@ -10,6 +10,9 @@ return [
     'fallback_locale' => 'en',
     'key' => env('APP_KEY'),
     'cipher' => 'AES-256-CBC',
+    'maintenance' => [
+        'driver' => 'file',
+    ],
     'providers' => [
         // Laravel Framework Service Providers
         Illuminate\Auth\AuthServiceProvider::class,
