@@ -14,6 +14,7 @@
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex">
     <aside class="w-56 border-r min-h-screen p-3 flex flex-col gap-0.5 text-sm flex-shrink-0" style="background:rgba(7,8,16,.9);border-color:rgba(255,255,255,.07);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)">
         <a href="/admin" class="flex items-center gap-2 px-3 py-2 mb-3">
+            <img src="/icons/icon-192.png" alt="MonFlow" class="w-6 h-6 rounded-md flex-shrink-0">
             <span class="text-sm font-bold text-gradient">MonFlow</span>
             <span class="text-xs text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded font-medium">Admin</span>
         </a>

@@ -22,7 +22,7 @@ class SetupDefaultTemplates extends Command
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
   <!-- Header -->
   <tr><td style="background:#18181b;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center">
-    <img src="https://monflow.fr/assets/img/spotiflix%20(1).png" alt="MonFlow" width="160" style="display:block;margin:0 auto">
+    <img src="https://client.monflow.fr/icons/icon-192.png" alt="MonFlow" width="64" height="64" style="display:block;margin:0 auto;border-radius:12px">
   </td></tr>
   <!-- Body -->
   <tr><td style="background:#ffffff;padding:40px 40px 32px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7">
@@ -185,7 +185,7 @@ HTML;
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
   <tr><td style="background:#18181b;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center">
-    <img src="https://monflow.fr/assets/img/spotiflix%20(1).png" alt="MonFlow" width="160" style="display:block;margin:0 auto">
+    <img src="https://client.monflow.fr/icons/icon-192.png" alt="MonFlow" width="64" height="64" style="display:block;margin:0 auto;border-radius:12px">
   </td></tr>
   <tr><td style="background:#ffffff;padding:40px 40px 32px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7">
     {{ content }}
