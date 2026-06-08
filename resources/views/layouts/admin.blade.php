@@ -40,6 +40,7 @@
         <a href="/admin/duplicates" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/duplicates*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Doublons</a>
 
         <span class="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider px-3 mt-4 mb-1">Système</span>
+        <a href="/admin/email-logs" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/email-logs*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Journal des mails</a>
         <a href="/admin/audit-logs" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/audit-logs*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Journal d'audit</a>
         <a href="/admin/logs" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/logs*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Logs serveur</a>
         <a href="/admin/settings/smtp" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/settings/smtp*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Config SMTP</a>

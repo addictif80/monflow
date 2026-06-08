@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\{SmtpConfiguration, EmailTemplate, User};
+use App\Models\{SmtpConfiguration, EmailTemplate, EmailLog, User};
 use App\Jobs\SendEmailJob;
 use Illuminate\Support\Facades\Log;
 
@@ -22,7 +22,7 @@ class EmailService
         return $template;
     }
 
-    private function send(SmtpConfiguration $smtp, string $to, string $subject, string $html): void
+    private function send(SmtpConfiguration $smtp, string $to, string $subject, string $html, ?string $type = null): void
     {
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             $smtp->host, $smtp->port, $smtp->use_tls
@@ -37,8 +37,15 @@ class EmailService
             ->to($to)
             ->subject($subject)
             ->html($html);
-        $mailer->send($email);
-        Log::info("Email sent to {$to}: {$subject}");
+
+        try {
+            $mailer->send($email);
+            Log::info("Email sent to {$to}: {$subject}");
+            EmailLog::create(['to' => $to, 'subject' => $subject, 'template_type' => $type, 'html_body' => $html, 'status' => 'sent']);
+        } catch (\Throwable $e) {
+            EmailLog::create(['to' => $to, 'subject' => $subject, 'template_type' => $type, 'html_body' => $html, 'status' => 'failed', 'error' => $e->getMessage()]);
+            throw $e;
+        }
     }
 
     public function sendTemplate(string $type, string $toEmail, array $ctx = []): void
@@ -55,7 +62,7 @@ class EmailService
             $ctx['site_url'] = config('app.url');
             $subject = $this->render($tpl->subject, $ctx);
             $body = $this->render($tpl->html_body, $ctx);
-            $this->send($smtp, $toEmail, $subject, $body);
+            $this->send($smtp, $toEmail, $subject, $body, $type);
         } catch (\Exception $e) {
             Log::error("Failed to send email [{$type}] to {$toEmail}: {$e->getMessage()}");
         }
@@ -79,13 +86,13 @@ class EmailService
         $renderedBody = $this->render($htmlBody, $ctx);
         $unsubLink = config('app.url') . '/portal/profile';
         $renderedBody = str_replace('</body>', "<div style=\"text-align:center;padding:16px;font-size:11px;color:#a1a1aa\"><a href=\"{$unsubLink}\" style=\"color:#6366f1\">Se désabonner de la newsletter</a></div></body>", $renderedBody);
-        $this->send($smtp, $u->email, $renderedSubject, $renderedBody);
+        $this->send($smtp, $u->email, $renderedSubject, $renderedBody, 'newsletter');
     }
 
     public function testSmtp(SmtpConfiguration $smtp, string $testEmail): array
     {
         try {
-            $this->send($smtp, $testEmail, 'Test SMTP — ' . config('app.name'), '<h1>Test OK</h1><p>La configuration SMTP fonctionne.</p>');
+            $this->send($smtp, $testEmail, 'Test SMTP — ' . config('app.name'), '<h1>Test OK</h1><p>La configuration SMTP fonctionne.</p>', 'test_smtp');
             return ['success' => true, 'message' => 'Email envoyé avec succès'];
         } catch (\Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];

@@ -227,6 +227,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/newsletters/{id}/send', [AdminController::class, 'newsletterSend']);
     Route::get('/newsletters/{id}/preview', [AdminController::class, 'newsletterPreview']);
 
+    // Email logs
+    Route::get('/email-logs', [AdminController::class, 'emailLogs']);
+    Route::get('/email-logs/{id}/preview', [AdminController::class, 'emailLogPreview']);
+
     // Audit logs
     Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
     Route::get('/logs', [AdminController::class, 'serverLogs']);
