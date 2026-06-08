@@ -1093,6 +1093,30 @@ class AdminController extends Controller
         return $redirect;
     }
 
+    // ─── Email Logs ───
+    public function emailLogs(Request $request)
+    {
+        $q      = (string) $request->input('q', '');
+        $status = (string) $request->input('status', '');
+        $type   = (string) $request->input('type', '');
+
+        $query = \App\Models\EmailLog::latest();
+        if ($q)      $query->where(fn ($b) => $b->where('to', 'like', "%{$q}%")->orWhere('subject', 'like', "%{$q}%"));
+        if ($status) $query->where('status', $status);
+        if ($type)   $query->where('template_type', $type);
+
+        $logs  = $query->paginate(50)->withQueryString();
+        $types = \App\Models\EmailLog::distinct()->orderBy('template_type')->pluck('template_type')->filter()->values();
+
+        return view('admin.email-logs.index', compact('logs', 'q', 'status', 'type', 'types'));
+    }
+
+    public function emailLogPreview(string $id)
+    {
+        $log = \App\Models\EmailLog::findOrFail($id);
+        return response($log->html_body, 200)->header('Content-Type', 'text/html; charset=utf-8');
+    }
+
     // ─── Audit Logs ───
     public function auditLogs(Request $request)
     {
