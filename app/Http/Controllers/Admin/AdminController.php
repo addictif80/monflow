@@ -272,6 +272,65 @@ class AdminController extends Controller
         return view('admin.subscriptions.list', ['subscriptions' => $q->paginate(25), 'statusFilter' => $status ?? '']);
     }
 
+    public function subscriptionRemindersEligible()
+    {
+        // Active, expires within 7 days but not yet past
+        $expiring = Subscription::with('user', 'plan')
+            ->where('status', 'active')
+            ->whereNotNull('current_period_end')
+            ->where('current_period_end', '>', now())
+            ->where('current_period_end', '<=', now()->addDays(7))
+            ->get()
+            ->map(fn ($s) => [
+                'id'         => $s->id,
+                'username'   => $s->user?->username ?? '—',
+                'email'      => $s->user?->email    ?? '—',
+                'plan'       => $s->plan?->name     ?? '—',
+                'price'      => (float) ($s->plan?->price ?? 0),
+                'ends_at'    => $s->current_period_end?->format('d/m/Y'),
+                'days_left'  => (int) now()->diffInDays($s->current_period_end, false) * -1,
+            ]);
+
+        // Active but period already past (overdue) OR status pending
+        $overdue = Subscription::with('user', 'plan')
+            ->where(fn ($q) => $q
+                ->where(fn ($q2) => $q2->where('status', 'active')->where('current_period_end', '<', now()))
+                ->orWhere('status', 'pending')
+            )
+            ->get()
+            ->map(fn ($s) => [
+                'id'           => $s->id,
+                'username'     => $s->user?->username ?? '—',
+                'email'        => $s->user?->email    ?? '—',
+                'plan'         => $s->plan?->name     ?? '—',
+                'status'       => $s->status,
+                'ends_at'      => $s->current_period_end?->format('d/m/Y') ?? '—',
+                'days_overdue' => $s->is_overdue ? $s->days_overdue : 0,
+            ]);
+
+        return response()->json(['expiring' => $expiring->values(), 'overdue' => $overdue->values()]);
+    }
+
+    public function subscriptionSendReminder(string $id, Request $request, EmailService $email)
+    {
+        $type = $request->input('type'); // 'renewal' | 'payment'
+        $sub  = Subscription::with('user', 'plan')->findOrFail($id);
+        $user = $sub->user;
+
+        if (!$user) {
+            return response()->json(['error' => 'Utilisateur introuvable.'], 422);
+        }
+
+        if ($type === 'renewal') {
+            $email->sendRenewalReminder($user, $sub->plan, (float) ($sub->plan?->price ?? 0));
+        } else {
+            $email->sendPaymentReminder($user, $sub->days_overdue);
+        }
+
+        AuditLog::record('subscription.reminder_sent', $sub, ['type' => $type, 'to' => $user->email]);
+        return response()->json(['success' => true, 'email' => $user->email]);
+    }
+
     public function subscriptionDetail(string $id)
     {
         $sub = Subscription::with('user', 'plan', 'payments')->findOrFail($id);

@@ -179,6 +179,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Subscriptions
     Route::get('/subscriptions', [AdminController::class, 'subscriptions']);
+    Route::get('/subscriptions/reminders-eligible', [AdminController::class, 'subscriptionRemindersEligible']);
+    Route::post('/subscriptions/{id}/send-reminder', [AdminController::class, 'subscriptionSendReminder']);
     Route::get('/subscriptions/{id}', [AdminController::class, 'subscriptionDetail']);
     Route::post('/subscriptions/{id}/extend', [AdminController::class, 'subscriptionExtend']);
     Route::post('/subscriptions/{id}/cancel', [AdminController::class, 'subscriptionCancel']);
