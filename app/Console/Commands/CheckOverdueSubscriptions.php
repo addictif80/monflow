@@ -19,6 +19,8 @@ class CheckOverdueSubscriptions extends Command
         $deleteDays = config('services.monflow.delete_delay_days', 30);
         $keepData = (bool) $this->option('keep-data');
 
+        $this->line("Config : suspend_delay_days={$suspendDays}, delete_delay_days={$deleteDays}, keep-data=" . ($keepData ? 'oui' : 'non'));
+
         // Get active subscriptions past their period end
         $overdue = Subscription::where('status', 'active')
             ->whereNotNull('current_period_end')
@@ -26,9 +28,18 @@ class CheckOverdueSubscriptions extends Command
             ->with('user')
             ->get();
 
+        $this->line("Abonnements 'active' en retard trouvés : {$overdue->count()}");
+
         foreach ($overdue as $sub) {
             $user = $sub->user;
-            if (!$user || $user->status === 'deleted') continue;
+            if (!$user) {
+                $this->line("- abonnement {$sub->id} : ignoré (aucun utilisateur associé)");
+                continue;
+            }
+            if ($user->status === 'deleted') {
+                $this->line("- {$user->username} : ignoré (utilisateur déjà supprimé, abonnement laissé en l'état — désynchronisation)");
+                continue;
+            }
 
             $daysOverdue = (int) now()->diffInDays($sub->current_period_end);
 
@@ -37,11 +48,15 @@ class CheckOverdueSubscriptions extends Command
                 if ($keepData) {
                     if ($user->status === 'active') {
                         $this->suspendUser($user, $sub, $nd, $mail);
+                        $this->line("- {$user->username} : suspendu ({$daysOverdue}j de retard, données conservées)");
                         Log::info("Auto-suspended (data kept) user {$user->username} ({$daysOverdue} days overdue, past delete threshold)");
+                    } else {
+                        $this->line("- {$user->username} : ignoré (statut déjà '{$user->status}', pas 'active')");
                     }
                     continue;
                 }
                 $this->deleteUser($user, $sub, $nd, $stripe, $mail);
+                $this->line("- {$user->username} : supprimé ({$daysOverdue}j de retard)");
                 Log::info("Auto-deleted user {$user->username} ({$daysOverdue} days overdue)");
                 continue;
             }
@@ -54,7 +69,10 @@ class CheckOverdueSubscriptions extends Command
             // J+7: suspend
             if ($daysOverdue >= $suspendDays && $user->status === 'active') {
                 $this->suspendUser($user, $sub, $nd, $mail);
+                $this->line("- {$user->username} : suspendu ({$daysOverdue}j de retard)");
                 Log::info("Auto-suspended user {$user->username} ({$daysOverdue} days overdue)");
+            } else {
+                $this->line("- {$user->username} : aucune action ({$daysOverdue}j de retard, statut '{$user->status}')");
             }
         }
 
@@ -86,10 +104,13 @@ class CheckOverdueSubscriptions extends Command
             ->with('user')
             ->get();
 
+        $this->line("Abonnements 'suspended' au-delà du délai de suppression : {$suspended->count()}");
+
         foreach ($suspended as $sub) {
             $user = $sub->user;
             if (!$user || $user->status === 'deleted') continue;
             $this->deleteUser($user, $sub, $nd, $stripe, $mail);
+            $this->line("- {$user->username} : supprimé (suspendu depuis plus de {$deleteDays}j)");
             Log::info("Auto-deleted suspended user {$user->username}");
         }
 
