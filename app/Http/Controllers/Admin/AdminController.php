@@ -358,6 +358,16 @@ class AdminController extends Controller
         return response()->json(['success' => true, 'email' => $user->email]);
     }
 
+    public function subscriptionPreviewOverdue(Request $request)
+    {
+        $keepData = $request->boolean('keep_data');
+        $args = ['--dry-run' => true];
+        if ($keepData) $args['--keep-data'] = true;
+        Artisan::call('subscriptions:check-overdue', $args);
+        $output = trim(Artisan::output());
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
     public function subscriptionProcessOverdue(Request $request)
     {
         $keepData = $request->boolean('keep_data');

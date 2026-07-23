@@ -39,8 +39,10 @@
         <div class="flex-1 overflow-y-auto px-5 py-4">
             <pre id="maintenanceOutput" class="text-xs text-zinc-400 whitespace-pre-wrap font-mono"></pre>
         </div>
-        <div class="px-5 py-4 border-t border-zinc-800 flex-shrink-0">
-            <button onclick="closeMaintenance()" class="text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg border border-zinc-700 transition">Fermer</button>
+        <div class="px-5 py-4 border-t border-zinc-800 flex-shrink-0 flex items-center gap-2">
+            <button id="maintenanceConfirmBtn" onclick="confirmMaintenance()"
+                    class="hidden inline-flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-40">Confirmer et exécuter</button>
+            <button onclick="closeMaintenance()" class="text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg border border-zinc-700 transition"><span id="maintenanceCloseLabel">Fermer</span></button>
         </div>
     </div>
 </div>
@@ -417,37 +419,28 @@ const maintenanceConfig = {
         title: 'Relances des paiements',
         confirm: "Lancer immédiatement l'envoi des rappels de paiement et de renouvellement à tous les abonnements éligibles ?",
     },
-    overdue: {
-        url: '/admin/subscriptions/process-overdue',
-        title: 'Suspensions / suppressions',
-        confirm: (keepData) => keepData
-            ? "Lancer immédiatement la vérification des abonnements en retard ? Les comptes dépassant le délai de grâce seront suspendus (accès Navidrome bloqué). Aucune suppression ne sera effectuée, même au-delà du délai de suppression — les données de tous les utilisateurs concernés seront conservées."
-            : "Lancer immédiatement la vérification des abonnements en retard ? Les comptes dépassant le délai de grâce seront suspendus (accès Navidrome bloqué) et ceux dépassant le délai de suppression seront SUPPRIMÉS (compte Navidrome + données).",
-    },
 };
 
-async function runMaintenance(kind) {
-    const cfg = maintenanceConfig[kind];
-    const keepData = kind === 'overdue' && document.getElementById('keepDataCheckbox').checked;
-    const confirmMsg = typeof cfg.confirm === 'function' ? cfg.confirm(keepData) : cfg.confirm;
-    if (!confirm(confirmMsg)) return;
+let pendingOverdueKeepData = false;
 
-    const btn = document.getElementById(kind === 'reminders' ? 'processRemindersBtn' : 'processOverdueBtn');
+async function runMaintenance(kind) {
+    if (kind === 'overdue') return previewOverdue();
+
+    const cfg = maintenanceConfig[kind];
+    if (!confirm(cfg.confirm)) return;
+
+    const btn = document.getElementById('processRemindersBtn');
     btn.disabled = true;
 
     document.getElementById('maintenanceTitle').textContent = cfg.title;
     document.getElementById('maintenanceOutput').textContent = 'Traitement en cours…';
+    document.getElementById('maintenanceConfirmBtn').classList.add('hidden');
     document.getElementById('maintenanceModal').classList.remove('hidden');
 
     try {
-        const body = kind === 'overdue' ? new URLSearchParams({ keep_data: keepData ? '1' : '0' }) : null;
-        const res  = await fetch(cfg.url, {
+        const res = await fetch(cfg.url, {
             method: 'POST',
-            headers: Object.assign(
-                { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
-                body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}
-            ),
-            body,
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
         });
         const data = await res.json();
         document.getElementById('maintenanceOutput').textContent = data.output || (data.success ? 'Terminé.' : (data.message || 'Erreur.'));
@@ -458,8 +451,62 @@ async function runMaintenance(kind) {
     }
 }
 
+async function previewOverdue() {
+    pendingOverdueKeepData = document.getElementById('keepDataCheckbox').checked;
+    const btn = document.getElementById('processOverdueBtn');
+    btn.disabled = true;
+
+    document.getElementById('maintenanceTitle').textContent = 'Suspensions / suppressions — aperçu';
+    document.getElementById('maintenanceOutput').textContent = 'Calcul des comptes concernés…';
+    document.getElementById('maintenanceConfirmBtn').classList.add('hidden');
+    document.getElementById('maintenanceModal').classList.remove('hidden');
+
+    try {
+        const body = new URLSearchParams({ keep_data: pendingOverdueKeepData ? '1' : '0' });
+        const res  = await fetch('/admin/subscriptions/preview-overdue', {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body,
+        });
+        const data = await res.json();
+        document.getElementById('maintenanceOutput').textContent = data.output || (data.message || 'Erreur.');
+        if (data.success) {
+            const confirmBtn = document.getElementById('maintenanceConfirmBtn');
+            confirmBtn.classList.remove('hidden');
+            confirmBtn.disabled = false;
+        }
+    } catch (e) {
+        document.getElementById('maintenanceOutput').textContent = 'Erreur : ' + e.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function confirmMaintenance() {
+    const confirmBtn = document.getElementById('maintenanceConfirmBtn');
+    confirmBtn.disabled = true;
+    document.getElementById('maintenanceOutput').textContent = 'Exécution en cours…';
+
+    try {
+        const body = new URLSearchParams({ keep_data: pendingOverdueKeepData ? '1' : '0' });
+        const res  = await fetch('/admin/subscriptions/process-overdue', {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body,
+        });
+        const data = await res.json();
+        document.getElementById('maintenanceTitle').textContent = 'Suspensions / suppressions — résultat';
+        document.getElementById('maintenanceOutput').textContent = data.output || (data.success ? 'Terminé.' : (data.message || 'Erreur.'));
+    } catch (e) {
+        document.getElementById('maintenanceOutput').textContent = 'Erreur : ' + e.message;
+    } finally {
+        confirmBtn.classList.add('hidden');
+    }
+}
+
 function closeMaintenance() {
     document.getElementById('maintenanceModal').classList.add('hidden');
+    document.getElementById('maintenanceConfirmBtn').classList.add('hidden');
 }
 
 document.getElementById('maintenanceModal').addEventListener('click', function (e) {
