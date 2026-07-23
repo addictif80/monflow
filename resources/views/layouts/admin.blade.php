@@ -45,6 +45,7 @@
         <a href="/admin/audit-logs" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/audit-logs*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Journal d'audit</a>
         <a href="/admin/logs" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/logs*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Logs serveur</a>
         <a href="/admin/settings/smtp" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/settings/smtp*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Config SMTP</a>
+        <a href="/admin/settings/restoration-fee" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/settings/restoration-fee*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Frais de restauration</a>
         <a href="/admin/settings/email-templates" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/settings/email-templates*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Templates email</a>
 
         <div class="mt-auto pt-4 border-t border-zinc-800">

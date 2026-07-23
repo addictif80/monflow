@@ -119,6 +119,18 @@ HTML;
                 ),
             ],
             [
+                'template_type' => 'deletion_warning',
+                'subject' => 'Votre compte {{ site_name }} sera supprimé dans {{ days_left }} jours',
+                'html_body' => $this->wrap(
+                    $this->heading('Suppression imminente de votre compte', '#d97706')
+                    . $this->p('Bonjour {{ first_name }},')
+                    . $this->p('Votre compte <strong>{{ username }}</strong> est suspendu depuis un impayé prolongé. Sans régularisation, il sera <strong>définitivement supprimé le {{ deletion_date }}</strong> (dans {{ days_left }} jours) : vos playlists, votre historique et vos préférences seront alors perdus.')
+                    . $this->p('Régularisez votre situation avant cette date pour conserver vos données et retrouver votre accès avec votre mot de passe habituel.')
+                    . $this->btn('{{ site_url }}/login', 'Régulariser ma situation', '#d97706')
+                    . $this->note('Passé ce délai, cette action sera irréversible.')
+                ),
+            ],
+            [
                 'template_type' => 'account_deleted',
                 'subject' => 'Votre compte {{ site_name }} a été supprimé',
                 'html_body' => $this->wrap(
@@ -127,6 +139,18 @@ HTML;
                     . $this->p('Votre compte <strong>{{ username }}</strong> a été définitivement supprimé de {{ site_name }} suite à un impayé prolongé. Vos données et playlists ne sont plus accessibles.')
                     . $this->p('Si vous souhaitez revenir, vous pouvez créer un nouveau compte à tout moment.')
                     . $this->btn('{{ site_url }}/register', 'Créer un nouveau compte', '#6366f1')
+                ),
+            ],
+            [
+                'template_type' => 'account_deleted_recoverable',
+                'subject' => 'Votre compte {{ site_name }} a été désactivé — récupération possible',
+                'html_body' => $this->wrap(
+                    $this->heading('Compte désactivé', '#d97706')
+                    . $this->p('Bonjour {{ first_name }},')
+                    . $this->p('Votre compte <strong>{{ username }}</strong> a été désactivé suite à un impayé. Bonne nouvelle : vos playlists, votre historique et vos préférences ont été <strong>conservés</strong>.')
+                    . $this->p('Vous pouvez récupérer votre compte tel quel moyennant des frais de restauration de <strong>{{ fee }} €</strong>. Contactez notre support pour en faire la demande.')
+                    . $this->btn('{{ site_url }}/login', 'Contacter le support', '#d97706')
+                    . $this->note('Sans démarche de votre part, ces données pourront être supprimées ultérieurement.')
                 ),
             ],
             [

@@ -165,6 +165,17 @@ contournement sécurisé :
    - Appelle `NavidromeService::reactivateUser()` qui restaure le mot de passe
    - L'utilisateur retrouve l'accès **sans rien changer** sur ses appareils
 
+4. **Avertissement avant suppression** : à J-7 avant la suppression définitive
+   (donc J+23 par défaut, `delete_delay_days - 7`), `subscriptions:check-overdue`
+   envoie un email `deletion_warning` à l'utilisateur suspendu pour l'informer
+   que ses données seront supprimées le `{{ deletion_date }}` s'il ne régularise
+   pas. L'envoi est tracé sur `subscriptions.deletion_warning_sent_at` pour ne
+   partir qu'une seule fois ; ce champ est remis à zéro automatiquement dès que
+   l'échéance de l'abonnement est repoussée dans le futur (renouvellement,
+   prolongation manuelle). Aucun avertissement n'est envoyé lors d'un
+   traitement manuel avec l'option `--keep-data` (aucune suppression n'aura
+   lieu dans ce cas).
+
 ## Clients mobiles et Android Auto / CarPlay
 
 MonFlow ne fournit pas d'app mobile propriétaire. Navidrome expose le **protocole

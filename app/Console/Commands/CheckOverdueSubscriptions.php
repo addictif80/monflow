@@ -9,13 +9,15 @@ use Illuminate\Support\Facades\Log;
 
 class CheckOverdueSubscriptions extends Command
 {
-    protected $signature = 'subscriptions:check-overdue';
+    protected $signature = 'subscriptions:check-overdue
+        {--keep-data : Suspendre uniquement — ne jamais supprimer les comptes/données, même après le délai de suppression}';
     protected $description = 'Suspend users at J+7 overdue, delete at J+30';
 
     public function handle(NavidromeService $nd, StripeService $stripe, EmailService $mail): void
     {
         $suspendDays = config('services.monflow.suspend_delay_days', 7);
         $deleteDays = config('services.monflow.delete_delay_days', 30);
+        $keepData = (bool) $this->option('keep-data');
 
         // Get active subscriptions past their period end
         $overdue = Subscription::where('status', 'active')
@@ -30,11 +32,23 @@ class CheckOverdueSubscriptions extends Command
 
             $daysOverdue = (int) now()->diffInDays($sub->current_period_end);
 
-            // J+30: delete
+            // J+30: delete (unless --keep-data, in which case suspend only)
             if ($daysOverdue >= $deleteDays) {
+                if ($keepData) {
+                    if ($user->status === 'active') {
+                        $this->suspendUser($user, $sub, $nd, $mail);
+                        Log::info("Auto-suspended (data kept) user {$user->username} ({$daysOverdue} days overdue, past delete threshold)");
+                    }
+                    continue;
+                }
                 $this->deleteUser($user, $sub, $nd, $stripe, $mail);
                 Log::info("Auto-deleted user {$user->username} ({$daysOverdue} days overdue)");
                 continue;
+            }
+
+            // J-7 before deletion: warn the user their data will soon be erased
+            if (!$keepData) {
+                $this->maybeSendDeletionWarning($sub, $user, $daysOverdue, $deleteDays, $mail);
             }
 
             // J+7: suspend
@@ -42,6 +56,27 @@ class CheckOverdueSubscriptions extends Command
                 $this->suspendUser($user, $sub, $nd, $mail);
                 Log::info("Auto-suspended user {$user->username} ({$daysOverdue} days overdue)");
             }
+        }
+
+        if ($keepData) {
+            $this->info('Overdue check completed (données conservées, aucune suppression effectuée).');
+            return;
+        }
+
+        // Suspended users nearing J+30: warn 7 days before deletion
+        $approaching = Subscription::where('status', 'suspended')
+            ->whereNotNull('current_period_end')
+            ->whereNull('deletion_warning_sent_at')
+            ->where('current_period_end', '<', now()->subDays($deleteDays - 7))
+            ->where('current_period_end', '>=', now()->subDays($deleteDays))
+            ->with('user')
+            ->get();
+
+        foreach ($approaching as $sub) {
+            $user = $sub->user;
+            if (!$user || $user->status === 'deleted') continue;
+            $daysOverdue = (int) now()->diffInDays($sub->current_period_end);
+            $this->maybeSendDeletionWarning($sub, $user, $daysOverdue, $deleteDays, $mail);
         }
 
         // Also check already-suspended users for J+30 deletion
@@ -59,6 +94,24 @@ class CheckOverdueSubscriptions extends Command
         }
 
         $this->info('Overdue check completed.');
+    }
+
+    private function maybeSendDeletionWarning(Subscription $sub, User $user, int $daysOverdue, int $deleteDays, EmailService $mail): void
+    {
+        if ($sub->deletion_warning_sent_at) return;
+
+        $daysLeft = $deleteDays - $daysOverdue;
+        if ($daysLeft < 0 || $daysLeft > 7) return;
+
+        $deletionDate = now()->addDays($daysLeft);
+        try {
+            $mail->sendDeletionWarning($user, $daysLeft, $deletionDate);
+        } catch (\Exception $e) {
+            Log::error("Deletion warning email failed for user {$user->username} ({$user->id}): {$e->getMessage()}");
+        }
+        $sub->update(['deletion_warning_sent_at' => now()]);
+        AuditLog::record('user.deletion_warning_sent', $user, ['days_left' => $daysLeft]);
+        Log::info("Sent deletion warning to {$user->username} ({$daysLeft} days left)");
     }
 
     private function suspendUser(User $user, Subscription $sub, NavidromeService $nd, EmailService $mail): void

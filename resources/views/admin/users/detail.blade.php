@@ -31,11 +31,20 @@
                 @csrf
                 <button type="submit" class="inline-flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium px-4 py-2 rounded-lg border border-emerald-500/20 transition">Réactiver</button>
             </form>
+        @elseif($user->status === 'deleted' && $user->deleted_with_data_kept)
+            <form method="POST" action="/admin/users/{{ $user->id }}/reactivate" onsubmit="return confirm('Réactiver ce compte ? Le mot de passe Navidrome original sera restauré et l\'accès rétabli. Pensez à facturer les frais de restauration si applicable.')">
+                @csrf
+                <button type="submit" class="inline-flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium px-4 py-2 rounded-lg border border-emerald-500/20 transition">Réactiver (données conservées)</button>
+            </form>
         @endif
 
         @if($user->status !== 'deleted')
-            <form method="POST" action="/admin/users/{{ $user->id }}/delete" onsubmit="return confirm('Supprimer cet utilisateur ? Cette action est irréversible.')">
+            <form method="POST" action="/admin/users/{{ $user->id }}/delete" onsubmit="return confirmDelete(this)" class="inline-flex items-center gap-2">
                 @csrf
+                <label class="inline-flex items-center gap-1.5 text-xs text-zinc-500 cursor-pointer whitespace-nowrap">
+                    <input type="checkbox" name="keep_data" value="1" class="accent-indigo-500 w-3.5 h-3.5">
+                    Conserver les données
+                </label>
                 <button type="submit" class="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/15 text-red-400 text-sm font-medium px-4 py-2 rounded-lg border border-red-500/20 transition">Supprimer</button>
             </form>
         @else
@@ -74,6 +83,9 @@
                     <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">suspendu</span>
                 @elseif($user->status === 'deleted')
                     <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">supprimé</span>
+                    @if($user->deleted_with_data_kept)
+                        <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 ml-1">données conservées</span>
+                    @endif
                 @endif
             </p>
         </div>
@@ -102,6 +114,14 @@
 </div>
 
 <script>
+function confirmDelete(form) {
+    const keepData = form.querySelector('[name=keep_data]').checked;
+    const msg = keepData
+        ? "Supprimer cet utilisateur en conservant ses données ? Son compte Navidrome et ses playlists ne seront PAS supprimés, et il recevra un mail l'informant qu'il peut récupérer son compte moyennant les frais de restauration configurés."
+        : "Supprimer cet utilisateur ? Cette action est irréversible : son compte Navidrome et toutes ses données (playlists, historique) seront définitivement supprimés.";
+    return confirm(msg);
+}
+
 document.getElementById('reveal-password-btn')?.addEventListener('click', async function () {
     const btn = this;
     const valueEl = document.getElementById('password-value');

@@ -12,15 +12,27 @@ class Subscription extends Model
     protected $fillable = [
         'user_id', 'plan_id', 'status', 'stripe_subscription_id',
         'promo_code_id', 'current_period_start', 'current_period_end',
-        'cancelled_at', 'is_gift', 'gifted_by', 'gift_recipient_email',
+        'cancelled_at', 'deletion_warning_sent_at', 'is_gift', 'gifted_by', 'gift_recipient_email',
     ];
 
     protected $casts = [
         'current_period_start' => 'datetime',
         'current_period_end' => 'datetime',
         'cancelled_at' => 'datetime',
+        'deletion_warning_sent_at' => 'datetime',
         'is_gift' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        // A subscription that was extended/renewed into the future is no longer
+        // heading toward deletion — allow a fresh warning if it lapses again.
+        static::updating(function (Subscription $sub) {
+            if ($sub->isDirty('current_period_end') && $sub->current_period_end && $sub->current_period_end->isFuture()) {
+                $sub->deletion_warning_sent_at = null;
+            }
+        });
+    }
 
     public function user() { return $this->belongsTo(User::class); }
     public function plan() { return $this->belongsTo(Plan::class); }

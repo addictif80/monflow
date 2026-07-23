@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter};
+use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter, AppSetting};
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Hash, DB, Log, Auth};
+use Illuminate\Support\Facades\{Hash, DB, Log, Auth, Artisan};
 
 class AdminController extends Controller
 {
@@ -129,7 +129,7 @@ class AdminController extends Controller
     public function userReactivate(string $id, NavidromeService $nd)
     {
         $user = User::findOrFail($id);
-        $user->update(['status' => 'active']);
+        $user->update(['status' => 'active', 'deleted_with_data_kept' => false]);
         // Restaurer le mot de passe original sur Navidrome
         if ($user->navidrome_id) {
             $originalPassword = $user->getDecryptedPassword();
@@ -141,25 +141,36 @@ class AdminController extends Controller
         return back()->with('success', "Utilisateur {$user->username} réactivé avec son mot de passe original.");
     }
 
-    public function userDelete(string $id, NavidromeService $nd, StripeService $stripe, EmailService $mail)
+    public function userDelete(string $id, Request $request, NavidromeService $nd, StripeService $stripe, EmailService $mail)
     {
         $user = User::findOrFail($id);
-        try { $mail->sendDeleted($user); } catch (\Exception $e) {}
-        if ($user->navidrome_id) {
-            try {
-                $nd->deleteUser($user->navidrome_id);
-                $user->navidrome_id = null; // on nettoie pour éviter toute réutilisation accidentelle
-            } catch (\Exception $e) {
-                Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}");
+        $keepData = $request->boolean('keep_data');
+
+        if ($keepData) {
+            $fee = (float) AppSetting::current()->restoration_fee;
+            try { $mail->sendDeletedRecoverable($user, $fee); } catch (\Exception $e) {}
+            // Le compte Navidrome et ses données (playlists, historique) sont conservés
+            // tels quels pour une éventuelle restauration ultérieure moyennant les frais configurés.
+        } else {
+            try { $mail->sendDeleted($user); } catch (\Exception $e) {}
+            if ($user->navidrome_id) {
+                try {
+                    $nd->deleteUser($user->navidrome_id);
+                    $user->navidrome_id = null; // on nettoie pour éviter toute réutilisation accidentelle
+                } catch (\Exception $e) {
+                    Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}");
+                }
             }
         }
+
         foreach (Subscription::where('user_id', $id)->whereNotNull('stripe_subscription_id')->where('stripe_subscription_id', '!=', '')->get() as $sub) {
             try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
         }
         $user->status = 'deleted';
+        $user->deleted_with_data_kept = $keepData;
         $user->save();
-        AuditLog::record('user.delete', $user);
-        return redirect('/admin/users')->with('success', "Utilisateur supprimé.");
+        AuditLog::record('user.delete', $user, ['keep_data' => $keepData]);
+        return redirect('/admin/users')->with('success', $keepData ? "Utilisateur supprimé (données conservées, mail de récupération envoyé)." : "Utilisateur supprimé.");
     }
 
     /**
@@ -347,6 +358,26 @@ class AdminController extends Controller
         return response()->json(['success' => true, 'email' => $user->email]);
     }
 
+    public function subscriptionProcessOverdue(Request $request)
+    {
+        $keepData = $request->boolean('keep_data');
+        Artisan::call('subscriptions:check-overdue', $keepData ? ['--keep-data' => true] : []);
+        $output = trim(Artisan::output());
+        AuditLog::record('subscription.process_overdue', null, ['output' => $output, 'keep_data' => $keepData]);
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
+    public function subscriptionProcessReminders()
+    {
+        Artisan::call('subscriptions:send-payment-reminders');
+        $paymentOutput = trim(Artisan::output());
+        Artisan::call('subscriptions:send-renewal-reminders');
+        $renewalOutput = trim(Artisan::output());
+        $output = "Rappels de paiement :\n{$paymentOutput}\n\nRappels de renouvellement :\n{$renewalOutput}";
+        AuditLog::record('subscription.process_reminders', null, ['output' => $output]);
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
     public function subscriptionDetail(string $id)
     {
         $sub = Subscription::with('user', 'plan', 'payments')->findOrFail($id);
@@ -473,6 +504,17 @@ class AdminController extends Controller
             return back()->with('success', 'Configuration SMTP sauvegardée.');
         }
         return view('admin.settings.smtp', compact('config'));
+    }
+
+    public function restorationFeeSettings(Request $request)
+    {
+        $settings = AppSetting::current();
+        if ($request->isMethod('post')) {
+            $data = $request->validate(['restoration_fee' => 'required|numeric|min:0']);
+            $settings->update($data);
+            return back()->with('success', 'Frais de restauration mis à jour.');
+        }
+        return view('admin.settings.restoration-fee', compact('settings'));
     }
 
     public function emailTemplates() { return view('admin.settings.email-templates', ['templates' => EmailTemplate::all()]); }

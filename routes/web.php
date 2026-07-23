@@ -182,6 +182,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/subscriptions', [AdminController::class, 'subscriptions']);
     Route::get('/subscriptions/reminders-eligible', [AdminController::class, 'subscriptionRemindersEligible']);
     Route::post('/subscriptions/{id}/send-reminder', [AdminController::class, 'subscriptionSendReminder']);
+    Route::post('/subscriptions/process-overdue', [AdminController::class, 'subscriptionProcessOverdue']);
+    Route::post('/subscriptions/process-reminders', [AdminController::class, 'subscriptionProcessReminders']);
     Route::get('/subscriptions/{id}', [AdminController::class, 'subscriptionDetail']);
     Route::post('/subscriptions/{id}/extend', [AdminController::class, 'subscriptionExtend']);
     Route::post('/subscriptions/{id}/cancel', [AdminController::class, 'subscriptionCancel']);
@@ -240,6 +242,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Settings
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);
+    Route::match(['get', 'post'], '/settings/restoration-fee', [AdminController::class, 'restorationFeeSettings']);
     Route::get('/settings/email-templates', [AdminController::class, 'emailTemplates']);
     Route::match(['get', 'post'], '/settings/email-templates/create', [AdminController::class, 'emailTemplateEdit']);
     Route::match(['get', 'post'], '/settings/email-templates/{id}', [AdminController::class, 'emailTemplateEdit']);
