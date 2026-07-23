@@ -7,7 +7,7 @@ use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, 
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Hash, DB, Log, Auth};
+use Illuminate\Support\Facades\{Hash, DB, Log, Auth, Artisan};
 
 class AdminController extends Controller
 {
@@ -345,6 +345,25 @@ class AdminController extends Controller
 
         AuditLog::record('subscription.reminder_sent', $sub, ['type' => $type, 'to' => $user->email]);
         return response()->json(['success' => true, 'email' => $user->email]);
+    }
+
+    public function subscriptionProcessOverdue()
+    {
+        Artisan::call('subscriptions:check-overdue');
+        $output = trim(Artisan::output());
+        AuditLog::record('subscription.process_overdue', null, ['output' => $output]);
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
+    public function subscriptionProcessReminders()
+    {
+        Artisan::call('subscriptions:send-payment-reminders');
+        $paymentOutput = trim(Artisan::output());
+        Artisan::call('subscriptions:send-renewal-reminders');
+        $renewalOutput = trim(Artisan::output());
+        $output = "Rappels de paiement :\n{$paymentOutput}\n\nRappels de renouvellement :\n{$renewalOutput}";
+        AuditLog::record('subscription.process_reminders', null, ['output' => $output]);
+        return response()->json(['success' => true, 'output' => $output]);
     }
 
     public function subscriptionDetail(string $id)

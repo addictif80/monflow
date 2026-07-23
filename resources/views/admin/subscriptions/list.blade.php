@@ -6,11 +6,39 @@
         <h1 class="text-base font-semibold text-zinc-100">Abonnements</h1>
         <p class="text-sm text-zinc-500 mt-0.5">Gestion des abonnements utilisateurs</p>
     </div>
-    <button type="button" onclick="openReminders()"
-            class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-        Envoyer des rappels
-    </button>
+    <div class="flex gap-2 flex-wrap">
+        <button type="button" onclick="openReminders()"
+                class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            Envoyer des rappels
+        </button>
+        <button type="button" id="processRemindersBtn" onclick="runMaintenance('reminders')"
+                class="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg border border-zinc-700 transition disabled:opacity-40">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Traiter les relances maintenant
+        </button>
+        <button type="button" id="processOverdueBtn" onclick="runMaintenance('overdue')"
+                class="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium px-4 py-2 rounded-lg border border-red-500/20 transition disabled:opacity-40">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Traiter les suspensions/suppressions
+        </button>
+    </div>
+</div>
+
+{{-- ─── Maintenance result modal ───────────────────────────────────────────── --}}
+<div id="maintenanceModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.8)">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col" style="max-height:80vh">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
+            <h2 class="text-sm font-semibold text-zinc-100" id="maintenanceTitle">Traitement</h2>
+            <button onclick="closeMaintenance()" class="text-zinc-600 hover:text-zinc-300 transition text-xl leading-none">✕</button>
+        </div>
+        <div class="flex-1 overflow-y-auto px-5 py-4">
+            <pre id="maintenanceOutput" class="text-xs text-zinc-400 whitespace-pre-wrap font-mono"></pre>
+        </div>
+        <div class="px-5 py-4 border-t border-zinc-800 flex-shrink-0">
+            <button onclick="closeMaintenance()" class="text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg border border-zinc-700 transition">Fermer</button>
+        </div>
+    </div>
 </div>
 
 {{-- ─── Reminder modal ─────────────────────────────────────────────────────── --}}
@@ -378,6 +406,52 @@ async function sendReminders() {
     document.getElementById('rmFinalFailed').textContent  = failed;
     showRmStep(4);
 }
+
+const maintenanceConfig = {
+    reminders: {
+        url: '/admin/subscriptions/process-reminders',
+        title: 'Relances des paiements',
+        confirm: "Lancer immédiatement l'envoi des rappels de paiement et de renouvellement à tous les abonnements éligibles ?",
+    },
+    overdue: {
+        url: '/admin/subscriptions/process-overdue',
+        title: 'Suspensions / suppressions',
+        confirm: "Lancer immédiatement la vérification des abonnements en retard ? Les comptes dépassant le délai de grâce seront suspendus (accès Navidrome bloqué) et ceux dépassant le délai de suppression seront supprimés.",
+    },
+};
+
+async function runMaintenance(kind) {
+    const cfg = maintenanceConfig[kind];
+    if (!confirm(cfg.confirm)) return;
+
+    const btn = document.getElementById(kind === 'reminders' ? 'processRemindersBtn' : 'processOverdueBtn');
+    btn.disabled = true;
+
+    document.getElementById('maintenanceTitle').textContent = cfg.title;
+    document.getElementById('maintenanceOutput').textContent = 'Traitement en cours…';
+    document.getElementById('maintenanceModal').classList.remove('hidden');
+
+    try {
+        const res  = await fetch(cfg.url, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+        });
+        const data = await res.json();
+        document.getElementById('maintenanceOutput').textContent = data.output || (data.success ? 'Terminé.' : (data.message || 'Erreur.'));
+    } catch (e) {
+        document.getElementById('maintenanceOutput').textContent = 'Erreur : ' + e.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function closeMaintenance() {
+    document.getElementById('maintenanceModal').classList.add('hidden');
+}
+
+document.getElementById('maintenanceModal').addEventListener('click', function (e) {
+    if (e.target === this) closeMaintenance();
+});
 
 function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
