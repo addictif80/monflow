@@ -242,6 +242,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/logs', [AdminController::class, 'serverLogs']);
 
     // Settings
+    Route::get('/settings/stripe', [AdminController::class, 'stripeSettings']);
+    Route::post('/settings/stripe/check-connection', [AdminController::class, 'stripeCheckConnection']);
+    Route::post('/settings/stripe/test-payment', [AdminController::class, 'stripeTestPayment']);
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);
     Route::match(['get', 'post'], '/settings/restoration-fee', [AdminController::class, 'restorationFeeSettings']);
     Route::get('/settings/email-templates', [AdminController::class, 'emailTemplates']);
