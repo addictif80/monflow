@@ -8,8 +8,8 @@ use Illuminate\Console\Command;
 
 class SendPaymentReminders extends Command
 {
-    protected $signature = 'subscriptions:send-reminders';
-    protected $description = 'Send payment reminders to users with expiring or overdue subscriptions';
+    protected $signature = 'subscriptions:send-payment-reminders';
+    protected $description = 'Send payment reminders to users with expiring or overdue subscriptions (daily relance)';
 
     public function handle(EmailService $mail): void
     {

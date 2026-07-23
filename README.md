@@ -106,7 +106,9 @@ automatiquement avec Navidrome (création, suspension, réactivation, suppressio
    ```
    Ceci déclenche :
    - `subscriptions:check-overdue` chaque heure (suspension J+7 / suppression J+30)
-   - `subscriptions:send-reminders` chaque jour à 9h
+   - `subscriptions:send-payment-reminders` chaque jour à 9h (relances avant échéance + relances quotidiennes en retard)
+   - `subscriptions:send-renewal-reminders` chaque jour à 9h15 (rappel de renouvellement à J-7)
+   - `queue:work --stop-when-empty` chaque minute (traite la file d'emails ; à remplacer par un worker persistant `supervisor`/`systemd` en production si le volume augmente)
 
 8. **Configurer le webhook Stripe**
    Dans Dashboard Stripe > Webhooks, créer un endpoint :
@@ -214,8 +216,11 @@ php artisan serve
 # Vérifier les abonnements en retard (suspension J+7, suppression J+30)
 php artisan subscriptions:check-overdue
 
-# Envoyer les rappels de paiement
-php artisan subscriptions:send-reminders
+# Envoyer les rappels de paiement (relance avant échéance + retards)
+php artisan subscriptions:send-payment-reminders
+
+# Envoyer les rappels de renouvellement (J-7)
+php artisan subscriptions:send-renewal-reminders
 
 # Installer/réinstaller les templates email par défaut
 php artisan setup:email-templates

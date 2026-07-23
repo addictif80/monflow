@@ -89,8 +89,52 @@
             <span class="text-xs text-zinc-500">Créé le</span>
             <p class="font-medium text-zinc-200 mt-0.5">{{ $user->created_at->format('d/m/Y H:i') }}</p>
         </div>
+        <div>
+            <span class="text-xs text-zinc-500">Mot de passe Navidrome</span>
+            <div class="mt-0.5 flex items-center gap-2">
+                <p id="password-value" class="font-medium font-mono text-xs text-zinc-400">••••••••</p>
+                <button type="button" id="reveal-password-btn"
+                        data-url="/admin/users/{{ $user->id }}/reveal-password"
+                        class="text-xs text-indigo-400 hover:text-indigo-300 underline">Afficher</button>
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+document.getElementById('reveal-password-btn')?.addEventListener('click', async function () {
+    const btn = this;
+    const valueEl = document.getElementById('password-value');
+    if (btn.dataset.revealed === '1') {
+        valueEl.textContent = '••••••••';
+        btn.textContent = 'Afficher';
+        btn.dataset.revealed = '0';
+        return;
+    }
+    btn.disabled = true;
+    try {
+        const res = await fetch(btn.dataset.url, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                'Accept': 'application/json',
+            },
+        });
+        const data = await res.json();
+        if (data.success) {
+            valueEl.textContent = data.password;
+            btn.textContent = 'Masquer';
+            btn.dataset.revealed = '1';
+        } else {
+            valueEl.textContent = data.message || 'Indisponible';
+        }
+    } catch (e) {
+        valueEl.textContent = 'Erreur';
+    } finally {
+        btn.disabled = false;
+    }
+});
+</script>
 
 {{-- Wallet Section --}}
 <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">

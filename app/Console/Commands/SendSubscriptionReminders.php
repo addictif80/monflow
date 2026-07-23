@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 class SendSubscriptionReminders extends Command
 {
-    protected $signature = 'subscriptions:send-reminders';
+    protected $signature = 'subscriptions:send-renewal-reminders';
     protected $description = 'Send renewal reminder emails 7 days before subscription renewal';
 
     public function handle(EmailService $mail): void

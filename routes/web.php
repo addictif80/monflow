@@ -155,6 +155,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::match(['get', 'post'], '/users/create', [AdminController::class, 'userCreate']);
     Route::match(['get', 'post'], '/users/{id}/edit', [AdminController::class, 'userEdit']);
     Route::get('/users/{id}', [AdminController::class, 'userDetail']);
+    Route::post('/users/{id}/reveal-password', [AdminController::class, 'revealPassword']);
     Route::post('/users/{id}/suspend', [AdminController::class, 'userSuspend']);
     Route::post('/users/{id}/reactivate', [AdminController::class, 'userReactivate']);
     Route::post('/users/{id}/delete', [AdminController::class, 'userDelete']);

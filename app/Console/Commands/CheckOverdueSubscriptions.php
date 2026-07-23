@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\{Subscription, User};
+use App\Models\{Subscription, User, AuditLog};
 use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -67,8 +67,17 @@ class CheckOverdueSubscriptions extends Command
         $sub->update(['status' => 'suspended']);
 
         if ($user->navidrome_id) {
-            try { $nd->suspendUser($user->navidrome_id); } catch (\Exception $e) { Log::error($e->getMessage()); }
+            try {
+                $nd->suspendUser($user->navidrome_id);
+            } catch (\Exception $e) {
+                Log::error("Navidrome suspend failed for user {$user->username} ({$user->id}): {$e->getMessage()}");
+                AuditLog::record('user.auto_suspend.navidrome_failed', $user, ['error' => $e->getMessage()]);
+            }
+        } else {
+            Log::warning("Auto-suspend: user {$user->username} ({$user->id}) has no navidrome_id — Navidrome account left untouched.");
+            AuditLog::record('user.auto_suspend.no_navidrome_id', $user);
         }
+        AuditLog::record('user.auto_suspend', $user);
         try { $mail->sendSuspended($user); } catch (\Exception $e) {}
     }
 
