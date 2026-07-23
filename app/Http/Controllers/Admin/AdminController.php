@@ -99,6 +99,22 @@ class AdminController extends Controller
         ]);
     }
 
+    public function revealPassword(string $id)
+    {
+        $user = User::findOrFail($id);
+        try {
+            $password = $user->getDecryptedPassword();
+        } catch (\Exception $e) {
+            Log::error("Failed to decrypt password for user {$id}: {$e->getMessage()}");
+            return response()->json(['success' => false, 'message' => "Mot de passe indisponible (erreur de déchiffrement)."], 422);
+        }
+        if (!$password) {
+            return response()->json(['success' => false, 'message' => "Aucun mot de passe enregistré pour cet utilisateur."], 422);
+        }
+        AuditLog::record('user.reveal_password', $user);
+        return response()->json(['success' => true, 'password' => $password]);
+    }
+
     public function userSuspend(string $id, NavidromeService $nd, EmailService $mail)
     {
         $user = User::findOrFail($id);

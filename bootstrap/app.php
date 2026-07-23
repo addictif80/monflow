@@ -48,7 +48,13 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
         $schedule->command('subscriptions:check-overdue')->hourly();
-        $schedule->command('subscriptions:send-reminders')->dailyAt('09:00');
+        $schedule->command('subscriptions:send-payment-reminders')->dailyAt('09:00');
+        $schedule->command('subscriptions:send-renewal-reminders')->dailyAt('09:15');
         $schedule->command('newsletter:weekly-new-music')->weeklyOn(1, '10:00');
+
+        // Les emails passent par la file d'attente (SendEmailJob) ; sans worker
+        // persistant (supervisor/systemd) les jobs restent bloqués en base.
+        // On les vide chaque minute en filet de sécurité.
+        $schedule->command('queue:work --stop-when-empty --tries=3')->everyMinute()->withoutOverlapping();
     })
     ->create();
