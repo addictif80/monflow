@@ -50,6 +50,6 @@ class Subscription extends Model
     public function getDaysOverdueAttribute(): int
     {
         if (!$this->is_overdue) return 0;
-        return (int) now()->diffInDays($this->current_period_end);
+        return (int) now()->diffInDays($this->current_period_end, true);
     }
 }

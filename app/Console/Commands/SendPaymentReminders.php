@@ -19,7 +19,7 @@ class SendPaymentReminders extends Command
             ->whereBetween('current_period_end', [now(), now()->addDays(3)])
             ->with('user')
             ->each(function ($sub) use ($mail) {
-                $days = (int) now()->diffInDays($sub->current_period_end, false);
+                $days = (int) now()->diffInDays($sub->current_period_end, true);
                 try { $mail->sendPaymentReminder($sub->user, $days); } catch (\Exception $e) {}
             });
 
@@ -29,8 +29,8 @@ class SendPaymentReminders extends Command
             ->where('current_period_end', '<', now())
             ->with('user')
             ->each(function ($sub) use ($mail) {
-                $days = (int) now()->diffInDays($sub->current_period_end);
-                try { $mail->sendPaymentReminder($sub->user, -$days); } catch (\Exception $e) {}
+                $days = (int) now()->diffInDays($sub->current_period_end, true);
+                try { $mail->sendPaymentReminder($sub->user, $days); } catch (\Exception $e) {}
             });
 
         $this->info('Reminders sent.');

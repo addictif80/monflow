@@ -41,7 +41,9 @@ class CheckOverdueSubscriptions extends Command
                 continue;
             }
 
-            $daysOverdue = (int) now()->diffInDays($sub->current_period_end);
+            // Carbon 3 returns a signed diff by default (negative for past dates) —
+            // force the absolute value so this behaves the same as it did on Carbon 2.
+            $daysOverdue = (int) now()->diffInDays($sub->current_period_end, true);
 
             // J+30: delete (unless --keep-data, in which case suspend only)
             if ($daysOverdue >= $deleteDays) {
@@ -93,7 +95,9 @@ class CheckOverdueSubscriptions extends Command
         foreach ($approaching as $sub) {
             $user = $sub->user;
             if (!$user || $user->status === 'deleted') continue;
-            $daysOverdue = (int) now()->diffInDays($sub->current_period_end);
+            // Carbon 3 returns a signed diff by default (negative for past dates) —
+            // force the absolute value so this behaves the same as it did on Carbon 2.
+            $daysOverdue = (int) now()->diffInDays($sub->current_period_end, true);
             $this->maybeSendDeletionWarning($sub, $user, $daysOverdue, $deleteDays, $mail);
         }
 
