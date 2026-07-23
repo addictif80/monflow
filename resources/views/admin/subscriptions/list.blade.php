@@ -201,8 +201,8 @@
                             {{ $s->current_period_end->format('d/m/Y') }}
                             @if($s->status === 'active' && $s->current_period_end->isPast())
                                 <span class="text-red-400 text-xs ml-1">expiré</span>
-                            @elseif($s->status === 'active' && $s->current_period_end->diffInDays(now()) <= 7)
-                                <span class="text-yellow-400 text-xs ml-1">{{ $s->current_period_end->diffInDays(now()) }}j restants</span>
+                            @elseif($s->status === 'active' && $s->current_period_end->diffInDays(now(), true) <= 7)
+                                <span class="text-yellow-400 text-xs ml-1">{{ $s->current_period_end->diffInDays(now(), true) }}j restants</span>
                             @endif
                         @else
                             —

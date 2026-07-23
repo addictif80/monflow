@@ -315,7 +315,7 @@ class AdminController extends Controller
                 'plan'       => $s->plan?->name     ?? '—',
                 'price'      => (float) ($s->plan?->price ?? 0),
                 'ends_at'    => $s->current_period_end?->format('d/m/Y'),
-                'days_left'  => (int) now()->diffInDays($s->current_period_end, false) * -1,
+                'days_left'  => (int) now()->diffInDays($s->current_period_end, true),
             ]);
 
         // Active but period already past (overdue) OR status pending

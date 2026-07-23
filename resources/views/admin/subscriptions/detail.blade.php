@@ -42,8 +42,8 @@
                     @if($sub->current_period_end && $sub->status === 'active')
                         @if($sub->current_period_end->isPast())
                             <span class="text-red-400 text-xs ml-1">expiré</span>
-                        @elseif($sub->current_period_end->diffInDays(now()) <= 7)
-                            <span class="text-yellow-400 text-xs ml-1">{{ $sub->current_period_end->diffInDays(now()) }}j restants</span>
+                        @elseif($sub->current_period_end->diffInDays(now(), true) <= 7)
+                            <span class="text-yellow-400 text-xs ml-1">{{ $sub->current_period_end->diffInDays(now(), true) }}j restants</span>
                         @endif
                     @endif
                 </dd>
