@@ -12,7 +12,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'username', 'email', 'password', 'encrypted_password',
-        'first_name', 'last_name', 'phone', 'status',
+        'first_name', 'last_name', 'phone', 'status', 'deleted_with_data_kept',
         'is_admin', 'newsletter_optin', 'navidrome_id', 'stripe_customer_id',
         'email_verified_at', 'display_name', 'avatar_path',
     ];
@@ -26,6 +26,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'newsletter_optin' => 'boolean',
+            'deleted_with_data_kept' => 'boolean',
         ];
     }
 

@@ -142,6 +142,18 @@ HTML;
                 ),
             ],
             [
+                'template_type' => 'account_deleted_recoverable',
+                'subject' => 'Votre compte {{ site_name }} a été désactivé — récupération possible',
+                'html_body' => $this->wrap(
+                    $this->heading('Compte désactivé', '#d97706')
+                    . $this->p('Bonjour {{ first_name }},')
+                    . $this->p('Votre compte <strong>{{ username }}</strong> a été désactivé suite à un impayé. Bonne nouvelle : vos playlists, votre historique et vos préférences ont été <strong>conservés</strong>.')
+                    . $this->p('Vous pouvez récupérer votre compte tel quel moyennant des frais de restauration de <strong>{{ fee }} €</strong>. Contactez notre support pour en faire la demande.')
+                    . $this->btn('{{ site_url }}/login', 'Contacter le support', '#d97706')
+                    . $this->note('Sans démarche de votre part, ces données pourront être supprimées ultérieurement.')
+                ),
+            ],
+            [
                 'template_type' => 'gift_received',
                 'subject' => 'Vous avez reçu un cadeau {{ site_name }} !',
                 'html_body' => $this->wrap(

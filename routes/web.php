@@ -242,6 +242,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Settings
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);
+    Route::match(['get', 'post'], '/settings/restoration-fee', [AdminController::class, 'restorationFeeSettings']);
     Route::get('/settings/email-templates', [AdminController::class, 'emailTemplates']);
     Route::match(['get', 'post'], '/settings/email-templates/create', [AdminController::class, 'emailTemplateEdit']);
     Route::match(['get', 'post'], '/settings/email-templates/{id}', [AdminController::class, 'emailTemplateEdit']);

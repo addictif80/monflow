@@ -74,6 +74,7 @@ class EmailService
     public function sendPasswordReset(User $u, string $url): void { $this->sendTemplate('password_reset', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'reset_url' => $url]); }
     public function sendSuspended(User $u): void { $this->sendTemplate('account_suspended', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
     public function sendDeleted(User $u): void { $this->sendTemplate('account_deleted', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
+    public function sendDeletedRecoverable(User $u, float $fee): void { $this->sendTemplate('account_deleted_recoverable', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'fee' => number_format($fee, 2, ',', ' ')]); }
     public function sendDeletionWarning(User $u, int $daysLeft, \DateTimeInterface $deletionDate): void { $this->sendTemplate('deletion_warning', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'days_left' => $daysLeft, 'deletion_date' => $deletionDate->format('d/m/Y')]); }
     public function sendGiftReceived(string $email, string $plan): void { $this->sendTemplate('gift_received', $email, ['plan' => $plan]); }
     public function sendRefund(User $u): void { $this->sendTemplate('refund_processed', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
