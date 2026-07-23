@@ -347,11 +347,12 @@ class AdminController extends Controller
         return response()->json(['success' => true, 'email' => $user->email]);
     }
 
-    public function subscriptionProcessOverdue()
+    public function subscriptionProcessOverdue(Request $request)
     {
-        Artisan::call('subscriptions:check-overdue');
+        $keepData = $request->boolean('keep_data');
+        Artisan::call('subscriptions:check-overdue', $keepData ? ['--keep-data' => true] : []);
         $output = trim(Artisan::output());
-        AuditLog::record('subscription.process_overdue', null, ['output' => $output]);
+        AuditLog::record('subscription.process_overdue', null, ['output' => $output, 'keep_data' => $keepData]);
         return response()->json(['success' => true, 'output' => $output]);
     }
 

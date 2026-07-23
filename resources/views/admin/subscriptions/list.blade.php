@@ -22,6 +22,10 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             Traiter les suspensions/suppressions
         </button>
+        <label class="inline-flex items-center gap-2 text-xs text-zinc-400 px-1">
+            <input type="checkbox" id="keepDataCheckbox" class="accent-indigo-500 w-3.5 h-3.5">
+            Conserver les données (suspendre seulement, ne jamais supprimer)
+        </label>
     </div>
 </div>
 
@@ -416,13 +420,17 @@ const maintenanceConfig = {
     overdue: {
         url: '/admin/subscriptions/process-overdue',
         title: 'Suspensions / suppressions',
-        confirm: "Lancer immédiatement la vérification des abonnements en retard ? Les comptes dépassant le délai de grâce seront suspendus (accès Navidrome bloqué) et ceux dépassant le délai de suppression seront supprimés.",
+        confirm: (keepData) => keepData
+            ? "Lancer immédiatement la vérification des abonnements en retard ? Les comptes dépassant le délai de grâce seront suspendus (accès Navidrome bloqué). Aucune suppression ne sera effectuée, même au-delà du délai de suppression — les données de tous les utilisateurs concernés seront conservées."
+            : "Lancer immédiatement la vérification des abonnements en retard ? Les comptes dépassant le délai de grâce seront suspendus (accès Navidrome bloqué) et ceux dépassant le délai de suppression seront SUPPRIMÉS (compte Navidrome + données).",
     },
 };
 
 async function runMaintenance(kind) {
     const cfg = maintenanceConfig[kind];
-    if (!confirm(cfg.confirm)) return;
+    const keepData = kind === 'overdue' && document.getElementById('keepDataCheckbox').checked;
+    const confirmMsg = typeof cfg.confirm === 'function' ? cfg.confirm(keepData) : cfg.confirm;
+    if (!confirm(confirmMsg)) return;
 
     const btn = document.getElementById(kind === 'reminders' ? 'processRemindersBtn' : 'processOverdueBtn');
     btn.disabled = true;
@@ -432,9 +440,14 @@ async function runMaintenance(kind) {
     document.getElementById('maintenanceModal').classList.remove('hidden');
 
     try {
+        const body = kind === 'overdue' ? new URLSearchParams({ keep_data: keepData ? '1' : '0' }) : null;
         const res  = await fetch(cfg.url, {
             method: 'POST',
-            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            headers: Object.assign(
+                { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}
+            ),
+            body,
         });
         const data = await res.json();
         document.getElementById('maintenanceOutput').textContent = data.output || (data.success ? 'Terminé.' : (data.message || 'Erreur.'));

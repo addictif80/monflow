@@ -9,13 +9,15 @@ use Illuminate\Support\Facades\Log;
 
 class CheckOverdueSubscriptions extends Command
 {
-    protected $signature = 'subscriptions:check-overdue';
+    protected $signature = 'subscriptions:check-overdue
+        {--keep-data : Suspendre uniquement — ne jamais supprimer les comptes/données, même après le délai de suppression}';
     protected $description = 'Suspend users at J+7 overdue, delete at J+30';
 
     public function handle(NavidromeService $nd, StripeService $stripe, EmailService $mail): void
     {
         $suspendDays = config('services.monflow.suspend_delay_days', 7);
         $deleteDays = config('services.monflow.delete_delay_days', 30);
+        $keepData = (bool) $this->option('keep-data');
 
         // Get active subscriptions past their period end
         $overdue = Subscription::where('status', 'active')
@@ -30,8 +32,15 @@ class CheckOverdueSubscriptions extends Command
 
             $daysOverdue = (int) now()->diffInDays($sub->current_period_end);
 
-            // J+30: delete
+            // J+30: delete (unless --keep-data, in which case suspend only)
             if ($daysOverdue >= $deleteDays) {
+                if ($keepData) {
+                    if ($user->status === 'active') {
+                        $this->suspendUser($user, $sub, $nd, $mail);
+                        Log::info("Auto-suspended (data kept) user {$user->username} ({$daysOverdue} days overdue, past delete threshold)");
+                    }
+                    continue;
+                }
                 $this->deleteUser($user, $sub, $nd, $stripe, $mail);
                 Log::info("Auto-deleted user {$user->username} ({$daysOverdue} days overdue)");
                 continue;
@@ -42,6 +51,11 @@ class CheckOverdueSubscriptions extends Command
                 $this->suspendUser($user, $sub, $nd, $mail);
                 Log::info("Auto-suspended user {$user->username} ({$daysOverdue} days overdue)");
             }
+        }
+
+        if ($keepData) {
+            $this->info('Overdue check completed (données conservées, aucune suppression effectuée).');
+            return;
         }
 
         // Also check already-suspended users for J+30 deletion
