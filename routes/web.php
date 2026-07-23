@@ -182,6 +182,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/subscriptions', [AdminController::class, 'subscriptions']);
     Route::get('/subscriptions/reminders-eligible', [AdminController::class, 'subscriptionRemindersEligible']);
     Route::post('/subscriptions/{id}/send-reminder', [AdminController::class, 'subscriptionSendReminder']);
+    Route::post('/subscriptions/preview-overdue', [AdminController::class, 'subscriptionPreviewOverdue']);
     Route::post('/subscriptions/process-overdue', [AdminController::class, 'subscriptionProcessOverdue']);
     Route::post('/subscriptions/process-reminders', [AdminController::class, 'subscriptionProcessReminders']);
     Route::get('/subscriptions/{id}', [AdminController::class, 'subscriptionDetail']);
