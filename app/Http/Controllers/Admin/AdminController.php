@@ -498,6 +498,52 @@ class AdminController extends Controller
         return view('admin.tickets.detail', ['ticket' => $ticket, 'messages' => $ticket->messages()->with('author')->get()]);
     }
 
+    // ─── Stripe ───
+    public function stripeSettings()
+    {
+        $publicKey = config('services.stripe.public_key');
+        $secretKey = config('services.stripe.secret_key');
+        $webhookSecret = config('services.stripe.webhook_secret');
+
+        $maskKey = function (?string $key): string {
+            if (!$key) return '';
+            $len = strlen($key);
+            if ($len <= 12) return substr($key, 0, 3) . str_repeat('•', max(4, $len - 3));
+            return substr($key, 0, 11) . str_repeat('•', 10) . substr($key, -4);
+        };
+        $keyMode = function (?string $key): ?string {
+            if (!$key) return null;
+            if (str_contains($key, '_test_')) return 'test';
+            if (str_contains($key, '_live_')) return 'live';
+            return null;
+        };
+
+        return view('admin.settings.stripe', [
+            'publicKeySet' => (bool) $publicKey,
+            'secretKeySet' => (bool) $secretKey,
+            'webhookSecretSet' => (bool) $webhookSecret,
+            'publicKeyMasked' => $maskKey($publicKey),
+            'secretKeyMasked' => $maskKey($secretKey),
+            'webhookSecretMasked' => $maskKey($webhookSecret),
+            'mode' => $keyMode($secretKey),
+        ]);
+    }
+
+    public function stripeCheckConnection(StripeService $stripe)
+    {
+        if (!config('services.stripe.secret_key')) {
+            return response()->json(['success' => false, 'message' => "Aucune clé secrète Stripe configurée dans le fichier .env (STRIPE_SECRET_KEY)."], 422);
+        }
+        return response()->json($stripe->checkConnection());
+    }
+
+    public function stripeTestPayment(StripeService $stripe)
+    {
+        $result = $stripe->testPayment();
+        AuditLog::record('stripe.test_payment', null, $result);
+        return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
     // ─── SMTP & Email Templates ───
     public function smtpConfig(Request $request, EmailService $mail)
     {
