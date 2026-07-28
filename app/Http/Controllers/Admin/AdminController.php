@@ -30,10 +30,14 @@ class AdminController extends Controller
             'openTickets' => Ticket::whereIn('status', ['open', 'in_progress'])->count(),
             'recentPayments' => Payment::with('user')->latest()->take(10)->get(),
             'recentTickets' => Ticket::with('user')->latest()->take(5)->get(),
+            // Groupé en PHP plutôt qu'avec DATE_FORMAT() (spécifique MySQL, absent
+            // de SQLite) pour rester portable entre l'environnement de test et la prod.
             'monthlyRevenue' => Payment::where('status', 'succeeded')
                 ->where('created_at', '>=', now()->subMonths(6)->startOfMonth())
-                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, SUM(amount) as total")
-                ->groupBy('month')->orderBy('month')->pluck('total', 'month'),
+                ->get(['created_at', 'amount'])
+                ->groupBy(fn ($p) => $p->created_at->format('Y-m'))
+                ->map(fn ($group) => $group->sum('amount'))
+                ->sortKeys(),
         ]);
     }
 
