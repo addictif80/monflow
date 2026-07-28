@@ -10,9 +10,11 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    // Pas de table "sessions" migrée dans ce projet : "file" est le driver par
-    // défaut sûr ici (contrairement au défaut Laravel 11 "database").
-    'driver' => env('SESSION_DRIVER', 'file'),
+    // Ce fichier n'existait pas avant ce correctif : Laravel 11 retombe alors
+    // sur son propre défaut interne ("database"). On le garde identique ici
+    // pour ne rien changer au comportement de prod déjà en place — seuls les
+    // réglages liés à la sécurité du cookie sont explicités ci-dessous.
+    'driver' => env('SESSION_DRIVER', 'database'),
 
     /*
     |--------------------------------------------------------------------------
