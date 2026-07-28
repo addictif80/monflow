@@ -137,8 +137,9 @@ HTML;
                     $this->heading('Compte supprimé', '#dc2626')
                     . $this->p('Bonjour {{ first_name }},')
                     . $this->p('Votre compte <strong>{{ username }}</strong> a été définitivement supprimé de {{ site_name }} suite à un impayé prolongé. Vos données et playlists ne sont plus accessibles.')
-                    . $this->p('Si vous souhaitez revenir, vous pouvez créer un nouveau compte à tout moment.')
-                    . $this->btn('{{ site_url }}/register', 'Créer un nouveau compte', '#6366f1')
+                    . $this->p('Si vous souhaitez revenir, cliquez ci-dessous pour libérer votre adresse email et créer un nouveau compte.')
+                    . $this->btn('{{ resubscribe_url }}', 'Souscrire à nouveau', '#6366f1')
+                    . $this->note('Ce lien est valable 30 jours.')
                 ),
             ],
             [

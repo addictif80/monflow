@@ -47,9 +47,11 @@ class DashboardController extends Controller
                 return back()->withErrors(['current_password' => 'Mot de passe actuel incorrect.']);
             }
             $request->user()->update(['password' => Hash::make($request->password)]);
-            $request->user()->storeEncryptedPassword($request->password);
-            if ($request->user()->navidrome_id) {
-                try { $nd->changePassword($request->user()->navidrome_id, $request->password); } catch (\Exception $e) {}
+            // Mot de passe Navidrome indépendant : inchangé ici, sauf s'il n'en
+            // existe pas encore un (compte créé avant ce correctif).
+            if ($request->user()->navidrome_id && !$request->user()->encrypted_password) {
+                $ndPassword = $request->user()->generateNavidromePassword();
+                try { $nd->changePassword($request->user()->navidrome_id, $ndPassword); } catch (\Exception $e) {}
             }
             return redirect('/login')->with('success', 'Mot de passe modifié. Reconnectez-vous.');
         }
@@ -253,42 +255,47 @@ class DashboardController extends Controller
         $total = max(0, $baseTotal - $discount);
         $wallet = $user->wallet ?? Wallet::create(['user_id' => $user->id]);
 
-        if ($wallet->balance < $total) {
-            return back()->with('error', "Solde insuffisant ({$wallet->balance}€). Rechargez votre portefeuille.");
-        }
-
-        if ($promo) $promo->increment('current_uses');
-
         $description = "{$plan->name} — {$months} mois";
         if ($promo) $description .= " (code {$promo->code} : -{$discount}€)";
 
-        DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
-            $wallet = Wallet::lockForUpdate()->find($wallet->id);
-            $wallet->decrement('balance', $total);
-            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'payment', 'amount' => -$total, 'description' => $description]);
+        try {
+            DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
+                // Le solde doit être revérifié *après* l'obtention du verrou, sinon
+                // deux paiements concurrents peuvent tous deux passer un contrôle
+                // fait avant le verrou et faire passer le solde en négatif.
+                $wallet = Wallet::lockForUpdate()->find($wallet->id);
+                if ($wallet->balance < $total) {
+                    throw new \App\Exceptions\InsufficientWalletBalanceException($wallet->balance);
+                }
+                if ($promo) $promo->increment('current_uses');
+                $wallet->decrement('balance', $total);
+                WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'payment', 'amount' => -$total, 'description' => $description]);
 
-            $days = $plan->period_days * $months;
-            $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
-            $end = ($sub && $sub->current_period_end && $sub->current_period_end->isFuture())
-                ? $sub->current_period_end->copy()->addDays($days)
-                : now()->addDays($days);
+                $days = $plan->period_days * $months;
+                $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
+                $end = ($sub && $sub->current_period_end && $sub->current_period_end->isFuture())
+                    ? $sub->current_period_end->copy()->addDays($days)
+                    : now()->addDays($days);
 
-            if ($sub) {
-                $sub->update(['plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $sub->current_period_start ?? now(), 'current_period_end' => $end]);
-            } else {
-                $sub = Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => now(), 'current_period_end' => $end]);
-            }
+                if ($sub) {
+                    $sub->update(['plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $sub->current_period_start ?? now(), 'current_period_end' => $end]);
+                } else {
+                    $sub = Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => now(), 'current_period_end' => $end]);
+                }
 
-            Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $total, 'stripe_amount' => 0, 'status' => 'succeeded', 'payment_method' => 'wallet', 'description' => "{$plan->name} — {$months} mois (portefeuille)"]);
+                Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $total, 'stripe_amount' => 0, 'status' => 'succeeded', 'payment_method' => 'wallet', 'description' => "{$plan->name} — {$months} mois (portefeuille)"]);
 
-            Notification::send($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
+                Notification::send($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
 
-            if ($user->status === 'suspended') $user->update(['status' => 'active']);
-            if ($user->navidrome_id) {
-                $pw = $user->getDecryptedPassword();
-                if ($pw) { try { $nd->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) { Log::error($e->getMessage()); } }
-            }
-        });
+                if ($user->status === 'suspended') $user->update(['status' => 'active']);
+                if ($user->navidrome_id) {
+                    $pw = $user->getDecryptedPassword();
+                    if ($pw) { try { $nd->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) { Log::error($e->getMessage()); } }
+                }
+            });
+        } catch (\App\Exceptions\InsufficientWalletBalanceException $e) {
+            return back()->with('error', "Solde insuffisant ({$e->balance}€). Rechargez votre portefeuille.");
+        }
 
         Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
 
@@ -445,12 +452,15 @@ class DashboardController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Anonymiser les données personnelles (les paiements sont conservés pour obligation légale)
+        // Anonymiser les données personnelles non nécessaires (les paiements sont
+        // conservés pour obligation légale). L'email est volontairement CONSERVÉ :
+        // c'est ce qui permet au parcours d'inscription de reconnaître "ce compte
+        // a été supprimé" et de proposer le lien "Souscrire à nouveau" reçu par
+        // email pour le libérer (AuthController::resubscribe), plutôt que de le
+        // rendre immédiatement et silencieusement réutilisable.
         DB::transaction(function () use ($user) {
-            $ts = now()->timestamp;
             $user->update([
                 'status'             => 'deleted',
-                'email'              => "deleted_{$ts}_{$user->id}@deleted.invalid",
                 'first_name'         => null,
                 'last_name'          => null,
                 'phone'              => null,

@@ -9,6 +9,8 @@ return [
     'monflow' => [
         'suspend_delay_days' => (int) env('SUSPEND_DELAY_DAYS', 7),
         'delete_delay_days' => (int) env('DELETE_DELAY_DAYS', 30),
+        'password_reset_ttl_minutes' => (int) env('PASSWORD_RESET_TTL_MINUTES', 60),
+        'email_verification_ttl_minutes' => (int) env('EMAIL_VERIFICATION_TTL_MINUTES', 1440),
     ],
     'deemix' => [
         'url' => rtrim(env('DEEMIX_URL', 'https://deemix.monflow.fr'), '/'),

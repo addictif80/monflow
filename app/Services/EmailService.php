@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\{SmtpConfiguration, EmailTemplate, EmailLog, User};
 use App\Jobs\SendEmailJob;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\{Log, URL};
 
 class EmailService
 {
@@ -73,7 +73,14 @@ class EmailService
     public function sendPaymentReminder(User $u, int $days): void { $this->sendTemplate('payment_reminder', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'days_overdue' => $days]); }
     public function sendPasswordReset(User $u, string $url): void { $this->sendTemplate('password_reset', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'reset_url' => $url]); }
     public function sendSuspended(User $u): void { $this->sendTemplate('account_suspended', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
-    public function sendDeleted(User $u): void { $this->sendTemplate('account_deleted', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
+    public function sendDeleted(User $u): void
+    {
+        // Lien signé (30 jours) permettant à l'utilisateur de libérer lui-même
+        // son ancienne adresse email pour se réinscrire, sans avoir à contacter
+        // le support ni à s'authentifier (le compte est supprimé).
+        $resubscribeUrl = URL::temporarySignedRoute('resubscribe', now()->addDays(30), ['id' => $u->id]);
+        $this->sendTemplate('account_deleted', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'resubscribe_url' => $resubscribeUrl]);
+    }
     public function sendDeletedRecoverable(User $u, float $fee): void { $this->sendTemplate('account_deleted_recoverable', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'fee' => number_format($fee, 2, ',', ' ')]); }
     public function sendDeletionWarning(User $u, int $daysLeft, \DateTimeInterface $deletionDate): void { $this->sendTemplate('deletion_warning', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'days_left' => $daysLeft, 'deletion_date' => $deletionDate->format('d/m/Y')]); }
     public function sendGiftReceived(string $email, string $plan): void { $this->sendTemplate('gift_received', $email, ['plan' => $plan]); }

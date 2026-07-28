@@ -31,8 +31,11 @@ class User extends Authenticatable
     }
 
     /**
-     * Store an encrypted copy of the plaintext password.
-     * Used for restoring Navidrome access after suspension.
+     * Store an encrypted copy of a plaintext password.
+     * Used only for restoring Navidrome access after suspension — this is
+     * deliberately NOT the user's account login password (see
+     * generateNavidromePassword()), so that a compromise of this field or of
+     * APP_KEY never exposes a password the user might reuse elsewhere.
      */
     public function storeEncryptedPassword(string $plaintext): void
     {
@@ -41,7 +44,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Retrieve the decrypted plaintext password.
+     * Retrieve the decrypted Navidrome-only password.
      */
     public function getDecryptedPassword(): ?string
     {
@@ -49,6 +52,18 @@ class User extends Authenticatable
             return null;
         }
         return Crypt::decryptString($this->encrypted_password);
+    }
+
+    /**
+     * Generate and store a fresh random password to use as this user's
+     * Navidrome credential. Independent from the account's login password
+     * so the two never need to (and never should) match.
+     */
+    public function generateNavidromePassword(): string
+    {
+        $password = bin2hex(random_bytes(16));
+        $this->storeEncryptedPassword($password);
+        return $password;
     }
 
     public function wallet()

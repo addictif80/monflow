@@ -62,3 +62,4 @@ storage/framework/testing/*
 !storage/framework/testing/.gitkeep
 storage/logs/*.log
 !storage/logs/.gitkeep
+.phpunit.result.cache
