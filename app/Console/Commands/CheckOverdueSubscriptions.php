@@ -210,6 +210,23 @@ class CheckOverdueSubscriptions extends Command
         }
 
         $sub->update(['status' => 'cancelled']);
-        $user->update(['status' => 'deleted']);
+
+        // Anonymiser les données personnelles (les paiements sont conservés pour
+        // obligation légale) — même logique que la suppression volontaire par
+        // l'utilisateur (DashboardController::deleteAccount) et que la
+        // suppression manuelle par un admin (AdminController::userDelete).
+        $ts = now()->timestamp;
+        $user->update([
+            'status' => 'deleted',
+            'email' => "deleted_{$ts}_{$user->id}@deleted.invalid",
+            'first_name' => null,
+            'last_name' => null,
+            'phone' => null,
+            'newsletter_optin' => false,
+            // navidrome_id nettoyé pour éviter toute réutilisation accidentelle
+            // (réactivation ultérieure sur un compte Navidrome déjà supprimé).
+            'navidrome_id' => null,
+            'encrypted_password' => null,
+        ]);
     }
 }

@@ -51,10 +51,11 @@ class AdminController extends Controller
         if ($request->isMethod('post')) {
             $data = $request->validated();
             $user = User::create([...$data, 'password' => Hash::make($data['password']), 'is_admin' => (bool)($data['is_admin'] ?? false)]);
-            $user->storeEncryptedPassword($data['password']);
+            // Mot de passe Navidrome indépendant du mot de passe de connexion.
+            $ndPassword = $user->generateNavidromePassword();
             Wallet::create(['user_id' => $user->id]);
             try {
-                $r = $nd->createUser($user->username, $data['password'], $user->full_name, $user->email);
+                $r = $nd->createUser($user->username, $ndPassword, $user->full_name, $user->email);
                 $user->update(['navidrome_id' => $r['id'] ?? null]);
                 // Les non-admins doivent souscrire avant d'avoir accès à Navidrome
                 if ($user->navidrome_id && !$user->is_admin) {
@@ -79,8 +80,12 @@ class AdminController extends Controller
             $user->is_admin = (bool)($data['is_admin'] ?? false);
             if (!empty($plainPassword)) {
                 $user->password = Hash::make($plainPassword);
-                $user->storeEncryptedPassword($plainPassword);
-                if ($user->navidrome_id) { try { $nd->changePassword($user->navidrome_id, $plainPassword); } catch (\Exception $e) {} }
+                // Le mot de passe Navidrome reste indépendant du mot de passe de
+                // connexion ; on n'en génère un que s'il n'en existe pas encore.
+                if ($user->navidrome_id && !$user->encrypted_password) {
+                    $ndPassword = $user->generateNavidromePassword();
+                    try { $nd->changePassword($user->navidrome_id, $ndPassword); } catch (\Exception $e) {}
+                }
             }
             $user->save();
             AuditLog::record('user.edit', $user, ['fields' => array_keys($data)]);
@@ -168,6 +173,19 @@ class AdminController extends Controller
         }
         $user->status = 'deleted';
         $user->deleted_with_data_kept = $keepData;
+        if (!$keepData) {
+            // Anonymise les données personnelles (les paiements sont conservés pour
+            // obligation légale), comme la suppression volontaire par l'utilisateur
+            // (DashboardController::deleteAccount) — suppression admin sans conservation
+            // des données doit avoir le même effet.
+            $ts = now()->timestamp;
+            $user->email = "deleted_{$ts}_{$user->id}@deleted.invalid";
+            $user->first_name = null;
+            $user->last_name = null;
+            $user->phone = null;
+            $user->newsletter_optin = false;
+            $user->encrypted_password = null;
+        }
         $user->save();
         AuditLog::record('user.delete', $user, ['keep_data' => $keepData]);
         return redirect('/admin/users')->with('success', $keepData ? "Utilisateur supprimé (données conservées, mail de récupération envoyé)." : "Utilisateur supprimé.");

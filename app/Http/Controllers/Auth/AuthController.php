@@ -53,11 +53,13 @@ class AuthController extends Controller
             'last_name' => $data['last_name'] ?? '',
             'password' => Hash::make($data['password']),
         ]);
-        $user->storeEncryptedPassword($data['password']);
+        // Mot de passe Navidrome indépendant du mot de passe du compte : ne jamais
+        // stocker/faire transiter le vrai mot de passe de connexion vers Navidrome.
+        $ndPassword = $user->generateNavidromePassword();
         Wallet::create(['user_id' => $user->id]);
 
         try {
-            $nd_user = $nd->createUser($user->username, $data['password'], $user->full_name, $user->email);
+            $nd_user = $nd->createUser($user->username, $ndPassword, $user->full_name, $user->email);
             $user->update(['navidrome_id' => $nd_user['id'] ?? null]);
             // Suspendre immédiatement Navidrome : l'accès musique nécessite un abonnement actif
             if ($user->navidrome_id) {
@@ -89,7 +91,8 @@ class AuthController extends Controller
         if (!$email) return redirect('/login')->withErrors(['username' => 'Lien de confirmation invalide.']);
 
         $record = \DB::table('email_verification_tokens')->where('email', $email)->first();
-        if (!$record || !Hash::check($token, $record->token)) {
+        $ttlMinutes = (int) config('services.monflow.email_verification_ttl_minutes', 1440);
+        if (!$record || !Hash::check($token, $record->token) || now()->diffInMinutes($record->created_at, true) > $ttlMinutes) {
             return redirect('/login')->withErrors(['username' => 'Lien de confirmation invalide ou expiré.']);
         }
 
@@ -158,14 +161,17 @@ class AuthController extends Controller
             'password' => 'required|min:6|confirmed',
         ]);
         $record = \DB::table('password_reset_tokens')->where('email', $data['email'])->first();
-        if (!$record || !Hash::check($data['token'], $record->token)) {
+        $ttlMinutes = (int) config('services.monflow.password_reset_ttl_minutes', 60);
+        if (!$record || !Hash::check($data['token'], $record->token) || now()->diffInMinutes($record->created_at, true) > $ttlMinutes) {
             return back()->withErrors(['token' => 'Lien invalide ou expiré.']);
         }
         $user = User::where('email', $data['email'])->firstOrFail();
         $user->update(['password' => Hash::make($data['password'])]);
-        $user->storeEncryptedPassword($data['password']);
-        if ($user->navidrome_id) {
-            try { $nd->changePassword($user->navidrome_id, $data['password']); } catch (\Exception $e) {}
+        // Le mot de passe Navidrome reste indépendant : on ne le change pas ici,
+        // sauf s'il n'en existe pas encore un (compte créé avant ce correctif).
+        if ($user->navidrome_id && !$user->encrypted_password) {
+            $ndPassword = $user->generateNavidromePassword();
+            try { $nd->changePassword($user->navidrome_id, $ndPassword); } catch (\Exception $e) {}
         }
         \DB::table('password_reset_tokens')->where('email', $data['email'])->delete();
         return redirect('/login')->with('success', 'Mot de passe réinitialisé.');

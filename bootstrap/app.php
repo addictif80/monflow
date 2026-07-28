@@ -10,8 +10,15 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // Derrière NPM → Tailscale → CyberPanel : faire confiance aux headers X-Forwarded-*
-        $middleware->trustProxies(at: '*');
+        // Derrière NPM → Tailscale → CyberPanel : faire confiance aux headers
+        // X-Forwarded-*, mais uniquement venant des sauts internes connus
+        // (loopback, réseaux privés RFC1918, plage Tailscale CGNAT), pas de
+        // n'importe quelle IP — sinon un client pourrait usurper son IP
+        // d'origine (contournement du throttle:auth par IP) ou le Host
+        // (empoisonnement des liens générés par url(), ex. reset password)
+        // si l'appli est un jour joignable en direct.
+        $trustedProxies = array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', '127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10'))));
+        $middleware->trustProxies(at: $trustedProxies);
 
         // Routes JSON (playlists) : déjà protégées par auth + CORS same-origin
         // OLS/CyberPanel interfère avec la validation CSRF sur les requêtes fetch
