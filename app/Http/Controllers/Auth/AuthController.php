@@ -127,6 +127,22 @@ class AuthController extends Controller
     }
 
     /**
+     * Permet à quelqu'un qui a supprimé le mail de suppression de se le faire
+     * renvoyer (donc de récupérer le lien "Souscrire à nouveau"), en indiquant
+     * simplement son adresse email. Réponse volontairement générique pour ne
+     * pas révéler si un compte supprimé existe pour cette adresse.
+     */
+    public function resendResubscribe(Request $request, EmailService $mail)
+    {
+        $request->validate(['email' => 'required|email']);
+        $user = User::where('email', $request->email)->where('status', 'deleted')->first();
+        if ($user && !str_starts_with($user->email, 'released_')) {
+            try { $mail->sendDeleted($user); } catch (\Exception $e) { Log::error("Resend resubscribe email failed: {$e->getMessage()}"); }
+        }
+        return redirect('/register')->with('success', "Si un compte supprimé existe pour cette adresse, un email contenant le lien « Souscrire à nouveau » vient d'être envoyé.");
+    }
+
+    /**
      * Lien "Souscrire à nouveau" reçu dans l'email de suppression de compte :
      * libère l'email (et le username) de l'ancien compte supprimé pour que
      * l'utilisateur puisse s'inscrire à nouveau avec la même adresse.

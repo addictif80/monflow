@@ -1,6 +1,16 @@
 @extends('layouts.auth')
 @section('title', 'Inscription — MonFlow')
 @section('content')
+@if($errors->has('email') && str_contains($errors->first('email'), 'supprimé'))
+    <div class="mb-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-400">
+        <p class="mb-3">Vous n'avez pas retrouvé l'email « Souscrire à nouveau » ? Vous pouvez vous le faire renvoyer.</p>
+        <form action="/resubscribe/resend" method="POST">
+            @csrf
+            <input type="hidden" name="email" value="{{ old('email') }}">
+            <button type="submit" class="inline-flex items-center gap-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-sm font-medium px-4 py-2 rounded-lg border border-yellow-500/30 transition">Renvoyer l'email</button>
+        </form>
+    </div>
+@endif
 <h1 class="text-xl font-semibold text-zinc-100 mb-1">Créer un compte</h1>
 <p class="text-sm text-zinc-500 mb-6">Rejoignez MonFlow</p>
 <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6">

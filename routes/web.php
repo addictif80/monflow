@@ -42,6 +42,7 @@ Route::post('/verify-email/resend-public', [AuthController::class, 'resendVerifi
 
 // ─── Resubscribe after account deletion (public, signed link from the "account deleted" email) ───
 Route::get('/resubscribe/{id}', [AuthController::class, 'resubscribe'])->middleware(['signed', 'throttle:auth'])->name('resubscribe');
+Route::post('/resubscribe/resend', [AuthController::class, 'resendResubscribe'])->middleware('throttle:auth')->name('resubscribe.resend');
 
 // ─── Stripe Webhook (no auth, no CSRF) ───
 Route::post('/stripe/webhook', [PaymentController::class, 'stripeWebhook'])->name('stripe.webhook');

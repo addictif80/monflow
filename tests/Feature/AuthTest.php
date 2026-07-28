@@ -197,4 +197,42 @@ class AuthTest extends TestCase
         $deleted->refresh();
         $this->assertEquals('old@example.com', $deleted->email);
     }
+
+    public function test_resend_resubscribe_email_for_deleted_account(): void
+    {
+        User::create([
+            'username' => 'olduser',
+            'email' => 'old@example.com',
+            'password' => Hash::make('password123'),
+            'status' => 'deleted',
+        ]);
+
+        $response = $this->post('/resubscribe/resend', ['email' => 'old@example.com']);
+
+        $response->assertRedirect('/register');
+        $response->assertSessionHas('success');
+    }
+
+    public function test_resend_resubscribe_email_gives_generic_response_for_unknown_email(): void
+    {
+        $response = $this->post('/resubscribe/resend', ['email' => 'unknown@example.com']);
+
+        $response->assertRedirect('/register');
+        $response->assertSessionHas('success');
+    }
+
+    public function test_resend_resubscribe_email_does_nothing_for_active_account(): void
+    {
+        User::create([
+            'username' => 'activeuser',
+            'email' => 'active@example.com',
+            'password' => Hash::make('password123'),
+            'status' => 'active',
+        ]);
+
+        $response = $this->post('/resubscribe/resend', ['email' => 'active@example.com']);
+
+        $response->assertRedirect('/register');
+        $response->assertSessionHas('success');
+    }
 }
