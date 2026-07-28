@@ -211,14 +211,16 @@ class CheckOverdueSubscriptions extends Command
 
         $sub->update(['status' => 'cancelled']);
 
-        // Anonymiser les données personnelles (les paiements sont conservés pour
-        // obligation légale) — même logique que la suppression volontaire par
-        // l'utilisateur (DashboardController::deleteAccount) et que la
+        // Anonymiser les données personnelles non nécessaires (les paiements
+        // sont conservés pour obligation légale) — même logique que la
         // suppression manuelle par un admin (AdminController::userDelete).
-        $ts = now()->timestamp;
+        // L'email est volontairement CONSERVÉ tel quel : c'est ce qui permet
+        // au parcours d'inscription de reconnaître "ce compte a été supprimé"
+        // et de proposer le lien "Souscrire à nouveau" reçu par email pour le
+        // libérer (AuthController::resubscribe) plutôt que de le rendre
+        // immédiatement et silencieusement réutilisable.
         $user->update([
             'status' => 'deleted',
-            'email' => "deleted_{$ts}_{$user->id}@deleted.invalid",
             'first_name' => null,
             'last_name' => null,
             'phone' => null,

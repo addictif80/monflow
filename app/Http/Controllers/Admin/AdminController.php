@@ -174,12 +174,13 @@ class AdminController extends Controller
         $user->status = 'deleted';
         $user->deleted_with_data_kept = $keepData;
         if (!$keepData) {
-            // Anonymise les données personnelles (les paiements sont conservés pour
-            // obligation légale), comme la suppression volontaire par l'utilisateur
-            // (DashboardController::deleteAccount) — suppression admin sans conservation
-            // des données doit avoir le même effet.
-            $ts = now()->timestamp;
-            $user->email = "deleted_{$ts}_{$user->id}@deleted.invalid";
+            // Anonymise les données personnelles non nécessaires (les paiements
+            // sont conservés pour obligation légale). L'email est volontairement
+            // CONSERVÉ : c'est ce qui permet au parcours d'inscription de
+            // reconnaître "ce compte a été supprimé" et de proposer le lien
+            // "Souscrire à nouveau" reçu par email pour le libérer
+            // (AuthController::resubscribe), plutôt que de le rendre
+            // immédiatement et silencieusement réutilisable.
             $user->first_name = null;
             $user->last_name = null;
             $user->phone = null;

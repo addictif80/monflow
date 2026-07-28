@@ -126,6 +126,30 @@ class AuthController extends Controller
         return redirect('/login')->with('success', 'Si un compte non confirmé existe, un nouveau mail de confirmation a été envoyé.');
     }
 
+    /**
+     * Lien "Souscrire à nouveau" reçu dans l'email de suppression de compte :
+     * libère l'email (et le username) de l'ancien compte supprimé pour que
+     * l'utilisateur puisse s'inscrire à nouveau avec la même adresse.
+     * Protégé par signature d'URL (pas de compte actif pour s'authentifier).
+     */
+    public function resubscribe(string $id)
+    {
+        $user = User::find($id);
+        if (!$user || $user->status !== 'deleted') {
+            return redirect('/register')->with('error', 'Lien invalide ou compte introuvable.');
+        }
+
+        if (!str_starts_with($user->email, 'released_')) {
+            $ts = now()->timestamp;
+            $user->email = 'released_' . $ts . '_' . $user->email;
+            $user->username = 'released_' . $ts . '_' . $user->username;
+            $user->save();
+            Log::info("Email released via self-service resubscribe link for deleted user {$user->id}");
+        }
+
+        return redirect('/register')->with('success', 'Votre adresse email est de nouveau disponible. Vous pouvez créer un nouveau compte.');
+    }
+
     public function logout(Request $request)
     {
         Auth::logout();

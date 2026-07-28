@@ -452,12 +452,15 @@ class DashboardController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Anonymiser les données personnelles (les paiements sont conservés pour obligation légale)
+        // Anonymiser les données personnelles non nécessaires (les paiements sont
+        // conservés pour obligation légale). L'email est volontairement CONSERVÉ :
+        // c'est ce qui permet au parcours d'inscription de reconnaître "ce compte
+        // a été supprimé" et de proposer le lien "Souscrire à nouveau" reçu par
+        // email pour le libérer (AuthController::resubscribe), plutôt que de le
+        // rendre immédiatement et silencieusement réutilisable.
         DB::transaction(function () use ($user) {
-            $ts = now()->timestamp;
             $user->update([
                 'status'             => 'deleted',
-                'email'              => "deleted_{$ts}_{$user->id}@deleted.invalid",
                 'first_name'         => null,
                 'last_name'          => null,
                 'phone'              => null,
