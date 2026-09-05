@@ -22,7 +22,7 @@ class EmailService
         return $template;
     }
 
-    private function send(SmtpConfiguration $smtp, string $to, string $subject, string $html, ?string $type = null): void
+    private function send(SmtpConfiguration $smtp, string $to, string $subject, string $html, ?string $type = null, array $attachments = []): void
     {
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             $smtp->host, $smtp->port, $smtp->use_tls
@@ -37,6 +37,10 @@ class EmailService
             ->to($to)
             ->subject($subject)
             ->html($html);
+
+        foreach ($attachments as $attachment) {
+            $email->attachFromPath($attachment['path'], $attachment['name'] ?? null, $attachment['mime'] ?? null);
+        }
 
         try {
             $mailer->send($email);
@@ -66,6 +70,29 @@ class EmailService
         } catch (\Exception $e) {
             Log::error("Failed to send email [{$type}] to {$toEmail}: {$e->getMessage()}");
         }
+    }
+
+    /**
+     * Envoi synchrone avec pièce jointe (rapport URSSAF) : contrairement à
+     * sendTemplateNow(), les erreurs remontent pour que l'appelant puisse
+     * marquer l'envoi en échec plutôt que le considérer silencieusement fait.
+     */
+    public function sendUrssafReport(string $toEmail, string $periodLabel, float $total, int $count, string $pdfPath): void
+    {
+        $smtp = $this->getSmtp();
+        $tpl = EmailTemplate::where('template_type', 'urssaf_report')->where('is_active', true)->firstOrFail();
+        $ctx = [
+            'period' => $periodLabel,
+            'total' => number_format($total, 2, ',', ' '),
+            'count' => $count,
+            'site_name' => config('app.name'),
+            'site_url' => config('app.url'),
+        ];
+        $subject = $this->render($tpl->subject, $ctx);
+        $body = $this->render($tpl->html_body, $ctx);
+        $this->send($smtp, $toEmail, $subject, $body, 'urssaf_report', [
+            ['path' => $pdfPath, 'name' => "declaration-urssaf-{$periodLabel}.pdf", 'mime' => 'application/pdf'],
+        ]);
     }
 
     public function sendVerification(User $u, string $url): void { $this->sendTemplate('email_verification', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'verify_url' => $url]); }

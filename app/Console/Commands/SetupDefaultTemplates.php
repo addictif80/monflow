@@ -199,6 +199,18 @@ HTML;
                 ),
             ],
             [
+                'template_type' => 'urssaf_report',
+                'subject' => 'Déclaration URSSAF {{ period }} — chiffre d\'affaires à déclarer',
+                'html_body' => $this->wrap(
+                    $this->heading('Rapport mensuel URSSAF')
+                    . $this->p('Bonjour,')
+                    . $this->p("Voici le récapitulatif des revenus perçus sur {{ site_name }} pour <strong>{{ period }}</strong> ({{ count }} transaction(s)), en pièce jointe au format PDF.")
+                    . "<div style=\"background:#f4f4f5;border-radius:8px;padding:20px;margin:20px 0;text-align:center\"><div style=\"font-size:13px;color:#71717a;margin-bottom:4px\">Chiffre d'affaires à déclarer</div><div style=\"font-size:28px;font-weight:700;color:#18181b\">{{ total }} &euro;</div></div>"
+                    . $this->p("N'oubliez pas d'effectuer votre déclaration de chiffre d'affaires sur le site de l'URSSAF avant la date limite.")
+                    . $this->note('Ce rapport est généré automatiquement à partir des paiements enregistrés comme réussis sur la période. Vérifiez les montants avant de déclarer.')
+                ),
+            ],
+            [
                 'template_type' => 'newsletter_layout',
                 'subject' => '',
                 'html_body' => <<<'LAYOUT'

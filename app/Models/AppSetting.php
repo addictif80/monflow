@@ -9,9 +9,12 @@ class AppSetting extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['restoration_fee'];
+    protected $fillable = ['restoration_fee', 'urssaf_report_day', 'urssaf_report_email'];
 
-    protected $casts = ['restoration_fee' => 'decimal:2'];
+    protected $casts = [
+        'restoration_fee' => 'decimal:2',
+        'urssaf_report_day' => 'integer',
+    ];
 
     public static function current(): self
     {

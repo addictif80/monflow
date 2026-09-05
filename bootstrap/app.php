@@ -59,6 +59,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('subscriptions:send-renewal-reminders')->dailyAt('09:15');
         $schedule->command('newsletter:weekly-new-music')->weeklyOn(1, '10:00');
 
+        // Déclaration URSSAF (auto-entrepreneur) : le jour du mois est configurable
+        // depuis /admin/settings/urssaf-report, la commande vérifie elle-même si
+        // elle doit s'exécuter aujourd'hui.
+        $schedule->command('urssaf:send-report')->dailyAt('08:30');
+
         // Les emails passent par la file d'attente (SendEmailJob) ; sans worker
         // persistant (supervisor/systemd) les jobs restent bloqués en base.
         // On les vide chaque minute en filet de sécurité.
