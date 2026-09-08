@@ -22,7 +22,7 @@ class SetupDefaultTemplates extends Command
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
   <!-- Header -->
   <tr><td style="background:#18181b;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center">
-    <img src="https://monflow.fr/assets/img/spotiflix%20(1).png" alt="MonFlow" width="160" style="display:block;margin:0 auto">
+    <img src="https://client.monflow.fr/icons/icon-192.png" alt="MonFlow" width="64" height="64" style="display:block;margin:0 auto;border-radius:12px">
   </td></tr>
   <!-- Body -->
   <tr><td style="background:#ffffff;padding:40px 40px 32px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7">
@@ -119,14 +119,39 @@ HTML;
                 ),
             ],
             [
+                'template_type' => 'deletion_warning',
+                'subject' => 'Votre compte {{ site_name }} sera supprimé dans {{ days_left }} jours',
+                'html_body' => $this->wrap(
+                    $this->heading('Suppression imminente de votre compte', '#d97706')
+                    . $this->p('Bonjour {{ first_name }},')
+                    . $this->p('Votre compte <strong>{{ username }}</strong> est suspendu depuis un impayé prolongé. Sans régularisation, il sera <strong>définitivement supprimé le {{ deletion_date }}</strong> (dans {{ days_left }} jours) : vos playlists, votre historique et vos préférences seront alors perdus.')
+                    . $this->p('Régularisez votre situation avant cette date pour conserver vos données et retrouver votre accès avec votre mot de passe habituel.')
+                    . $this->btn('{{ site_url }}/login', 'Régulariser ma situation', '#d97706')
+                    . $this->note('Passé ce délai, cette action sera irréversible.')
+                ),
+            ],
+            [
                 'template_type' => 'account_deleted',
                 'subject' => 'Votre compte {{ site_name }} a été supprimé',
                 'html_body' => $this->wrap(
                     $this->heading('Compte supprimé', '#dc2626')
                     . $this->p('Bonjour {{ first_name }},')
                     . $this->p('Votre compte <strong>{{ username }}</strong> a été définitivement supprimé de {{ site_name }} suite à un impayé prolongé. Vos données et playlists ne sont plus accessibles.')
-                    . $this->p('Si vous souhaitez revenir, vous pouvez créer un nouveau compte à tout moment.')
-                    . $this->btn('{{ site_url }}/register', 'Créer un nouveau compte', '#6366f1')
+                    . $this->p('Si vous souhaitez revenir, cliquez ci-dessous pour libérer votre adresse email et créer un nouveau compte.')
+                    . $this->btn('{{ resubscribe_url }}', 'Souscrire à nouveau', '#6366f1')
+                    . $this->note('Ce lien est valable 30 jours.')
+                ),
+            ],
+            [
+                'template_type' => 'account_deleted_recoverable',
+                'subject' => 'Votre compte {{ site_name }} a été désactivé — récupération possible',
+                'html_body' => $this->wrap(
+                    $this->heading('Compte désactivé', '#d97706')
+                    . $this->p('Bonjour {{ first_name }},')
+                    . $this->p('Votre compte <strong>{{ username }}</strong> a été désactivé suite à un impayé. Bonne nouvelle : vos playlists, votre historique et vos préférences ont été <strong>conservés</strong>.')
+                    . $this->p('Vous pouvez récupérer votre compte tel quel moyennant des frais de restauration de <strong>{{ fee }} €</strong>. Contactez notre support pour en faire la demande.')
+                    . $this->btn('{{ site_url }}/login', 'Contacter le support', '#d97706')
+                    . $this->note('Sans démarche de votre part, ces données pourront être supprimées ultérieurement.')
                 ),
             ],
             [
@@ -173,12 +198,51 @@ HTML;
                     . $this->note('Ce message est envoyé à titre informatif pour vous permettre de gérer votre abonnement en toute sérénité.')
                 ),
             ],
+            [
+                'template_type' => 'urssaf_report',
+                'subject' => 'Déclaration URSSAF {{ period }} — chiffre d\'affaires à déclarer',
+                'html_body' => $this->wrap(
+                    $this->heading('Rapport mensuel URSSAF')
+                    . $this->p('Bonjour,')
+                    . $this->p("Voici le récapitulatif des revenus perçus sur {{ site_name }} pour <strong>{{ period }}</strong> ({{ count }} transaction(s)), en pièce jointe au format PDF.")
+                    . "<div style=\"background:#f4f4f5;border-radius:8px;padding:20px;margin:20px 0;text-align:center\"><div style=\"font-size:13px;color:#71717a;margin-bottom:4px\">Chiffre d'affaires à déclarer</div><div style=\"font-size:28px;font-weight:700;color:#18181b\">{{ total }} &euro;</div></div>"
+                    . $this->p("N'oubliez pas d'effectuer votre déclaration de chiffre d'affaires sur le site de l'URSSAF avant la date limite.")
+                    . $this->note('Ce rapport est généré automatiquement à partir des paiements enregistrés comme réussis sur la période. Vérifiez les montants avant de déclarer.')
+                ),
+            ],
+            [
+                'template_type' => 'newsletter_layout',
+                'subject' => '',
+                'html_body' => <<<'LAYOUT'
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
+  <tr><td style="background:#18181b;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center">
+    <img src="https://client.monflow.fr/icons/icon-192.png" alt="MonFlow" width="64" height="64" style="display:block;margin:0 auto;border-radius:12px">
+  </td></tr>
+  <tr><td style="background:#ffffff;padding:40px 40px 32px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7">
+    {{ content }}
+  </td></tr>
+  <tr><td style="background:#fafafa;border-radius:0 0 12px 12px;padding:24px 40px;border:1px solid #e4e4e7;border-top:none;text-align:center">
+    <p style="margin:0;font-size:12px;color:#a1a1aa;line-height:1.5">{{ site_name }} &mdash; Votre musique, votre espace<br>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+LAYOUT,
+            ],
         ];
 
         foreach ($templates as $tpl) {
             EmailTemplate::updateOrCreate(
                 ['template_type' => $tpl['template_type']],
-                array_merge($tpl, ['is_active' => true])
+                array_merge($tpl, ['is_active' => true, 'subject' => $tpl['subject'] ?? ''])
             );
         }
 

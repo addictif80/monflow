@@ -15,7 +15,7 @@ class SendWeeklyNewMusic extends Command
     public function handle(NavidromeService $nd, EmailService $mail): void
     {
         try {
-            $albums = $nd->getRecentAlbums(10);
+            $albums = $nd->getRecentAlbums(10, now()->subDays(7));
             $topArtists = $nd->getTopPlayedArtists(5);
         } catch (\Exception $e) {
             $this->error("Failed to fetch from Navidrome: {$e->getMessage()}");
@@ -52,7 +52,7 @@ class SendWeeklyNewMusic extends Command
         $this->info("Weekly newsletter sent to {$sent} subscriber(s) with " . count($albums) . " album(s) and " . count($topArtists) . " top artist(s).");
     }
 
-    private function buildEmail(array $albums, array $topArtists): string
+    public static function buildEmail(array $albums, array $topArtists): string
     {
         $albumCards = '';
         foreach (array_slice($albums, 0, 10) as $album) {

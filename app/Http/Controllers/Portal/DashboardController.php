@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Payment, Subscription, Wallet, WalletTransaction, UserDevice, Plan, PromoCode, Notification};
-use App\Services\{NavidromeService, StripeService};
+use App\Models\{Payment, Subscription, Wallet, WalletTransaction, UserDevice, Plan, PromoCode, Notification, Ticket, Feedback};
+use App\Services\{NavidromeService, StripeService, EmailService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Hash, Log, DB};
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardController extends Controller
 {
@@ -28,6 +29,7 @@ class DashboardController extends Controller
         if ($request->isMethod('post')) {
             $data = $request->validate(['first_name' => 'nullable|max:100', 'last_name' => 'nullable|max:100', 'email' => 'required|email', 'phone' => 'nullable|max:20', 'newsletter_optin' => 'nullable']);
             $data['newsletter_optin'] = (bool) ($data['newsletter_optin'] ?? false);
+            $data['phone'] = $data['phone'] ?? '';
             $request->user()->update($data);
             if ($request->user()->navidrome_id) {
                 try { $nd->updateUser($request->user()->navidrome_id, ['name' => $request->user()->full_name, 'email' => $data['email']]); } catch (\Exception $e) {}
@@ -45,9 +47,11 @@ class DashboardController extends Controller
                 return back()->withErrors(['current_password' => 'Mot de passe actuel incorrect.']);
             }
             $request->user()->update(['password' => Hash::make($request->password)]);
-            $request->user()->storeEncryptedPassword($request->password);
-            if ($request->user()->navidrome_id) {
-                try { $nd->changePassword($request->user()->navidrome_id, $request->password); } catch (\Exception $e) {}
+            // Mot de passe Navidrome indépendant : inchangé ici, sauf s'il n'en
+            // existe pas encore un (compte créé avant ce correctif).
+            if ($request->user()->navidrome_id && !$request->user()->encrypted_password) {
+                $ndPassword = $request->user()->generateNavidromePassword();
+                try { $nd->changePassword($request->user()->navidrome_id, $ndPassword); } catch (\Exception $e) {}
             }
             return redirect('/login')->with('success', 'Mot de passe modifié. Reconnectez-vous.');
         }
@@ -251,42 +255,47 @@ class DashboardController extends Controller
         $total = max(0, $baseTotal - $discount);
         $wallet = $user->wallet ?? Wallet::create(['user_id' => $user->id]);
 
-        if ($wallet->balance < $total) {
-            return back()->with('error', "Solde insuffisant ({$wallet->balance}€). Rechargez votre portefeuille.");
-        }
-
-        if ($promo) $promo->increment('current_uses');
-
         $description = "{$plan->name} — {$months} mois";
         if ($promo) $description .= " (code {$promo->code} : -{$discount}€)";
 
-        DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
-            $wallet = Wallet::lockForUpdate()->find($wallet->id);
-            $wallet->decrement('balance', $total);
-            WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'subscription', 'amount' => -$total, 'description' => $description]);
+        try {
+            DB::transaction(function () use ($user, $plan, $months, $total, $wallet, $nd, $promo, $description) {
+                // Le solde doit être revérifié *après* l'obtention du verrou, sinon
+                // deux paiements concurrents peuvent tous deux passer un contrôle
+                // fait avant le verrou et faire passer le solde en négatif.
+                $wallet = Wallet::lockForUpdate()->find($wallet->id);
+                if ($wallet->balance < $total) {
+                    throw new \App\Exceptions\InsufficientWalletBalanceException($wallet->balance);
+                }
+                if ($promo) $promo->increment('current_uses');
+                $wallet->decrement('balance', $total);
+                WalletTransaction::create(['wallet_id' => $wallet->id, 'type' => 'payment', 'amount' => -$total, 'description' => $description]);
 
-            $days = $plan->period_days * $months;
-            $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
-            $end = ($sub && $sub->current_period_end && $sub->current_period_end->isFuture())
-                ? $sub->current_period_end->copy()->addDays($days)
-                : now()->addDays($days);
+                $days = $plan->period_days * $months;
+                $sub = Subscription::where('user_id', $user->id)->whereIn('status', ['active', 'pending'])->latest()->first();
+                $end = ($sub && $sub->current_period_end && $sub->current_period_end->isFuture())
+                    ? $sub->current_period_end->copy()->addDays($days)
+                    : now()->addDays($days);
 
-            if ($sub) {
-                $sub->update(['plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $sub->current_period_start ?? now(), 'current_period_end' => $end]);
-            } else {
-                $sub = Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => now(), 'current_period_end' => $end]);
-            }
+                if ($sub) {
+                    $sub->update(['plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => $sub->current_period_start ?? now(), 'current_period_end' => $end]);
+                } else {
+                    $sub = Subscription::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'status' => 'active', 'current_period_start' => now(), 'current_period_end' => $end]);
+                }
 
-            Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $total, 'stripe_amount' => 0, 'status' => 'succeeded', 'payment_method' => 'wallet', 'description' => "{$plan->name} — {$months} mois (portefeuille)"]);
+                Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $total, 'stripe_amount' => 0, 'status' => 'succeeded', 'payment_method' => 'wallet', 'description' => "{$plan->name} — {$months} mois (portefeuille)"]);
 
-            Notification::send($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
+                Notification::send($user->id, 'payment_success', 'Paiement confirmé', "Votre abonnement {$plan->name} ({$months} mois) a été activé via le portefeuille.", '/portal');
 
-            if ($user->status === 'suspended') $user->update(['status' => 'active']);
-            if ($user->navidrome_id) {
-                $pw = $user->getDecryptedPassword();
-                if ($pw) { try { $nd->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) { Log::error($e->getMessage()); } }
-            }
-        });
+                if ($user->status === 'suspended') $user->update(['status' => 'active']);
+                if ($user->navidrome_id) {
+                    $pw = $user->getDecryptedPassword();
+                    if ($pw) { try { $nd->reactivateUser($user->navidrome_id, $pw); } catch (\Exception $e) { Log::error($e->getMessage()); } }
+                }
+            });
+        } catch (\App\Exceptions\InsufficientWalletBalanceException $e) {
+            return back()->with('error', "Solde insuffisant ({$e->balance}€). Rechargez votre portefeuille.");
+        }
 
         Subscription::where('user_id', $user->id)->where('status', 'pending')->delete();
 
@@ -309,5 +318,162 @@ class DashboardController extends Controller
     {
         $payment = Payment::where('user_id', Auth::id())->findOrFail($id);
         return view('portal.invoice', ['payment' => $payment, 'user' => Auth::user()]);
+    }
+
+    public function cancelSubscriptionConfirm()
+    {
+        $sub = Auth::user()->activeSubscription?->load('plan');
+        if (!$sub) return redirect('/portal')->with('error', 'Aucun abonnement actif.');
+        return view('portal.cancel-subscription', ['sub' => $sub]);
+    }
+
+    public function exportData(Request $request)
+    {
+        $user = Auth::user();
+
+        $wallet = $user->wallet;
+        $transactions = $wallet
+            ? WalletTransaction::where('wallet_id', $wallet->id)->orderBy('created_at')->get()
+            : collect();
+
+        $tickets = Ticket::where('user_id', $user->id)
+            ->with(['messages' => fn($q) => $q->orderBy('created_at')])
+            ->latest()->get();
+
+        $subscriptions = Subscription::where('user_id', $user->id)->with('plan')->latest()->get();
+        $payments      = Payment::where('user_id', $user->id)->latest()->get();
+        $feedbacks     = Feedback::where('user_id', $user->id)->latest()->get();
+        $devices       = UserDevice::where('user_id', $user->id)->latest('last_active')->get();
+
+        $filename = 'monflow-export-' . now()->format('Y-m-d') . '.html';
+        $html = view('portal.export-data', compact(
+            'user', 'wallet', 'transactions', 'subscriptions',
+            'payments', 'tickets', 'feedbacks', 'devices'
+        ))->render();
+
+        return response($html, 200, [
+            'Content-Type'        => 'text/html; charset=utf-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    public function updateDisplayName(Request $request)
+    {
+        $user = Auth::user();
+        $name = trim($request->input('display_name', ''));
+
+        $request->validate([
+            'display_name' => ['required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9_\-\.]+$/'],
+        ], [
+            'display_name.regex' => 'Le pseudo ne peut contenir que des lettres, chiffres, _, - et .',
+        ]);
+
+        $exists = \App\Models\User::where('display_name', $name)
+            ->where('id', '!=', $user->id)->exists();
+
+        if ($exists) {
+            $base = substr($name, 0, 44);
+            $suggestions = [];
+            $tries = 0;
+            while (count($suggestions) < 4 && $tries < 20) {
+                $candidate = $base . str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                if (!\App\Models\User::where('display_name', $candidate)->exists()) {
+                    $suggestions[] = $candidate;
+                }
+                $tries++;
+            }
+            return back()->withErrors(['display_name' => 'Ce pseudo est déjà pris.'])
+                ->with('display_name_suggestions', $suggestions)
+                ->withInput();
+        }
+
+        $user->display_name = $name;
+        $user->save();
+
+        return back()->with('success', 'Pseudo mis à jour.');
+    }
+
+    public function updateAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => ['required', 'image', 'max:2048', 'mimes:jpeg,png,gif,webp'],
+        ]);
+
+        $user = Auth::user();
+        $file = $request->file('avatar');
+        $filename = $user->id . '.' . $file->getClientOriginalExtension();
+
+        $dir = public_path('avatars');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $file->move($dir, $filename);
+
+        $user->avatar_path = 'avatars/' . $filename;
+        $user->save();
+
+        return back()->with('success', 'Photo de profil mise à jour.');
+    }
+
+    public function deleteAccount(Request $request, NavidromeService $nd, StripeService $stripe, EmailService $mail)
+    {
+        $user = Auth::user();
+
+        if ($request->isMethod('get')) {
+            return view('portal.delete-account');
+        }
+
+        $request->validate([
+            'password' => 'required',
+            'confirm'  => 'required|in:SUPPRIMER',
+        ], [
+            'confirm.in' => 'Tapez exactement SUPPRIMER pour confirmer.',
+        ]);
+
+        if (!Hash::check($request->password, $user->password)) {
+            return back()->withErrors(['password' => 'Mot de passe incorrect.']);
+        }
+
+        // Annuler les abonnements Stripe actifs
+        foreach (Subscription::where('user_id', $user->id)->whereNotNull('stripe_subscription_id')->where('stripe_subscription_id', '!=', '')->get() as $sub) {
+            try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
+        }
+
+        // Supprimer le compte Navidrome
+        if ($user->navidrome_id) {
+            try { $nd->deleteUser($user->navidrome_id); } catch (\Exception $e) {
+                Log::error("Navidrome delete failed for user {$user->id}: {$e->getMessage()}");
+            }
+        }
+
+        // Envoyer l'email de confirmation avant d'anonymiser
+        try { $mail->sendDeleted($user); } catch (\Exception $e) {}
+
+        // Déconnexion immédiate
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        // Anonymiser les données personnelles non nécessaires (les paiements sont
+        // conservés pour obligation légale). L'email est volontairement CONSERVÉ :
+        // c'est ce qui permet au parcours d'inscription de reconnaître "ce compte
+        // a été supprimé" et de proposer le lien "Souscrire à nouveau" reçu par
+        // email pour le libérer (AuthController::resubscribe), plutôt que de le
+        // rendre immédiatement et silencieusement réutilisable.
+        DB::transaction(function () use ($user) {
+            $user->update([
+                'status'             => 'deleted',
+                'first_name'         => null,
+                'last_name'          => null,
+                'phone'              => null,
+                'newsletter_optin'   => false,
+                'navidrome_id'       => null,
+                'encrypted_password' => null,
+            ]);
+
+            Subscription::where('user_id', $user->id)->whereNotIn('status', ['cancelled', 'expired'])->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+            UserDevice::where('user_id', $user->id)->delete();
+            Notification::where('user_id', $user->id)->delete();
+        });
+
+        return redirect('/login')->with('success', 'Votre compte a été supprimé. Vos données personnelles ont été effacées.');
     }
 }

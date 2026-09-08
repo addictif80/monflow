@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter};
+use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter, AppSetting, UrssafReport};
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
-use App\Services\{NavidromeService, StripeService, EmailService};
+use App\Services\{NavidromeService, StripeService, EmailService, UrssafReportService};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Hash, DB, Log};
+use Illuminate\Support\Facades\{Hash, DB, Log, Auth, Artisan, Storage};
 
 class AdminController extends Controller
 {
@@ -30,10 +30,14 @@ class AdminController extends Controller
             'openTickets' => Ticket::whereIn('status', ['open', 'in_progress'])->count(),
             'recentPayments' => Payment::with('user')->latest()->take(10)->get(),
             'recentTickets' => Ticket::with('user')->latest()->take(5)->get(),
+            // Groupé en PHP plutôt qu'avec DATE_FORMAT() (spécifique MySQL, absent
+            // de SQLite) pour rester portable entre l'environnement de test et la prod.
             'monthlyRevenue' => Payment::where('status', 'succeeded')
                 ->where('created_at', '>=', now()->subMonths(6)->startOfMonth())
-                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, SUM(amount) as total")
-                ->groupBy('month')->orderBy('month')->pluck('total', 'month'),
+                ->get(['created_at', 'amount'])
+                ->groupBy(fn ($p) => $p->created_at->format('Y-m'))
+                ->map(fn ($group) => $group->sum('amount'))
+                ->sortKeys(),
         ]);
     }
 
@@ -51,10 +55,11 @@ class AdminController extends Controller
         if ($request->isMethod('post')) {
             $data = $request->validated();
             $user = User::create([...$data, 'password' => Hash::make($data['password']), 'is_admin' => (bool)($data['is_admin'] ?? false)]);
-            $user->storeEncryptedPassword($data['password']);
+            // Mot de passe Navidrome indépendant du mot de passe de connexion.
+            $ndPassword = $user->generateNavidromePassword();
             Wallet::create(['user_id' => $user->id]);
             try {
-                $r = $nd->createUser($user->username, $data['password'], $user->full_name, $user->email);
+                $r = $nd->createUser($user->username, $ndPassword, $user->full_name, $user->email);
                 $user->update(['navidrome_id' => $r['id'] ?? null]);
                 // Les non-admins doivent souscrire avant d'avoir accès à Navidrome
                 if ($user->navidrome_id && !$user->is_admin) {
@@ -79,8 +84,12 @@ class AdminController extends Controller
             $user->is_admin = (bool)($data['is_admin'] ?? false);
             if (!empty($plainPassword)) {
                 $user->password = Hash::make($plainPassword);
-                $user->storeEncryptedPassword($plainPassword);
-                if ($user->navidrome_id) { try { $nd->changePassword($user->navidrome_id, $plainPassword); } catch (\Exception $e) {} }
+                // Le mot de passe Navidrome reste indépendant du mot de passe de
+                // connexion ; on n'en génère un que s'il n'en existe pas encore.
+                if ($user->navidrome_id && !$user->encrypted_password) {
+                    $ndPassword = $user->generateNavidromePassword();
+                    try { $nd->changePassword($user->navidrome_id, $ndPassword); } catch (\Exception $e) {}
+                }
             }
             $user->save();
             AuditLog::record('user.edit', $user, ['fields' => array_keys($data)]);
@@ -99,6 +108,22 @@ class AdminController extends Controller
         ]);
     }
 
+    public function revealPassword(string $id)
+    {
+        $user = User::findOrFail($id);
+        try {
+            $password = $user->getDecryptedPassword();
+        } catch (\Exception $e) {
+            Log::error("Failed to decrypt password for user {$id}: {$e->getMessage()}");
+            return response()->json(['success' => false, 'message' => "Mot de passe indisponible (erreur de déchiffrement)."], 422);
+        }
+        if (!$password) {
+            return response()->json(['success' => false, 'message' => "Aucun mot de passe enregistré pour cet utilisateur."], 422);
+        }
+        AuditLog::record('user.reveal_password', $user);
+        return response()->json(['success' => true, 'password' => $password]);
+    }
+
     public function userSuspend(string $id, NavidromeService $nd, EmailService $mail)
     {
         $user = User::findOrFail($id);
@@ -113,7 +138,7 @@ class AdminController extends Controller
     public function userReactivate(string $id, NavidromeService $nd)
     {
         $user = User::findOrFail($id);
-        $user->update(['status' => 'active']);
+        $user->update(['status' => 'active', 'deleted_with_data_kept' => false]);
         // Restaurer le mot de passe original sur Navidrome
         if ($user->navidrome_id) {
             $originalPassword = $user->getDecryptedPassword();
@@ -125,25 +150,50 @@ class AdminController extends Controller
         return back()->with('success', "Utilisateur {$user->username} réactivé avec son mot de passe original.");
     }
 
-    public function userDelete(string $id, NavidromeService $nd, StripeService $stripe, EmailService $mail)
+    public function userDelete(string $id, Request $request, NavidromeService $nd, StripeService $stripe, EmailService $mail)
     {
         $user = User::findOrFail($id);
-        try { $mail->sendDeleted($user); } catch (\Exception $e) {}
-        if ($user->navidrome_id) {
-            try {
-                $nd->deleteUser($user->navidrome_id);
-                $user->navidrome_id = null; // on nettoie pour éviter toute réutilisation accidentelle
-            } catch (\Exception $e) {
-                Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}");
+        $keepData = $request->boolean('keep_data');
+
+        if ($keepData) {
+            $fee = (float) AppSetting::current()->restoration_fee;
+            try { $mail->sendDeletedRecoverable($user, $fee); } catch (\Exception $e) {}
+            // Le compte Navidrome et ses données (playlists, historique) sont conservés
+            // tels quels pour une éventuelle restauration ultérieure moyennant les frais configurés.
+        } else {
+            try { $mail->sendDeleted($user); } catch (\Exception $e) {}
+            if ($user->navidrome_id) {
+                try {
+                    $nd->deleteUser($user->navidrome_id);
+                    $user->navidrome_id = null; // on nettoie pour éviter toute réutilisation accidentelle
+                } catch (\Exception $e) {
+                    Log::error("Navidrome delete failed for user {$id}: {$e->getMessage()}");
+                }
             }
         }
+
         foreach (Subscription::where('user_id', $id)->whereNotNull('stripe_subscription_id')->where('stripe_subscription_id', '!=', '')->get() as $sub) {
             try { $stripe->cancelSubscriptionNow($sub->stripe_subscription_id); } catch (\Exception $e) {}
         }
         $user->status = 'deleted';
+        $user->deleted_with_data_kept = $keepData;
+        if (!$keepData) {
+            // Anonymise les données personnelles non nécessaires (les paiements
+            // sont conservés pour obligation légale). L'email est volontairement
+            // CONSERVÉ : c'est ce qui permet au parcours d'inscription de
+            // reconnaître "ce compte a été supprimé" et de proposer le lien
+            // "Souscrire à nouveau" reçu par email pour le libérer
+            // (AuthController::resubscribe), plutôt que de le rendre
+            // immédiatement et silencieusement réutilisable.
+            $user->first_name = null;
+            $user->last_name = null;
+            $user->phone = null;
+            $user->newsletter_optin = false;
+            $user->encrypted_password = null;
+        }
         $user->save();
-        AuditLog::record('user.delete', $user);
-        return redirect('/admin/users')->with('success', "Utilisateur supprimé.");
+        AuditLog::record('user.delete', $user, ['keep_data' => $keepData]);
+        return redirect('/admin/users')->with('success', $keepData ? "Utilisateur supprimé (données conservées, mail de récupération envoyé)." : "Utilisateur supprimé.");
     }
 
     /**
@@ -272,6 +322,95 @@ class AdminController extends Controller
         return view('admin.subscriptions.list', ['subscriptions' => $q->paginate(25), 'statusFilter' => $status ?? '']);
     }
 
+    public function subscriptionRemindersEligible()
+    {
+        // Active, expires within 7 days but not yet past
+        $expiring = Subscription::with('user', 'plan')
+            ->where('status', 'active')
+            ->whereNotNull('current_period_end')
+            ->where('current_period_end', '>', now())
+            ->where('current_period_end', '<=', now()->addDays(7))
+            ->get()
+            ->map(fn ($s) => [
+                'id'         => $s->id,
+                'username'   => $s->user?->username ?? '—',
+                'email'      => $s->user?->email    ?? '—',
+                'plan'       => $s->plan?->name     ?? '—',
+                'price'      => (float) ($s->plan?->price ?? 0),
+                'ends_at'    => $s->current_period_end?->format('d/m/Y'),
+                'days_left'  => (int) now()->diffInDays($s->current_period_end, true),
+            ]);
+
+        // Active but period already past (overdue) OR status pending
+        $overdue = Subscription::with('user', 'plan')
+            ->where(fn ($q) => $q
+                ->where(fn ($q2) => $q2->where('status', 'active')->where('current_period_end', '<', now()))
+                ->orWhere('status', 'pending')
+            )
+            ->get()
+            ->map(fn ($s) => [
+                'id'           => $s->id,
+                'username'     => $s->user?->username ?? '—',
+                'email'        => $s->user?->email    ?? '—',
+                'plan'         => $s->plan?->name     ?? '—',
+                'status'       => $s->status,
+                'ends_at'      => $s->current_period_end?->format('d/m/Y') ?? '—',
+                'days_overdue' => $s->is_overdue ? $s->days_overdue : 0,
+            ]);
+
+        return response()->json(['expiring' => $expiring->values(), 'overdue' => $overdue->values()]);
+    }
+
+    public function subscriptionSendReminder(string $id, Request $request, EmailService $email)
+    {
+        $type = $request->input('type'); // 'renewal' | 'payment'
+        $sub  = Subscription::with('user', 'plan')->findOrFail($id);
+        $user = $sub->user;
+
+        if (!$user) {
+            return response()->json(['error' => 'Utilisateur introuvable.'], 422);
+        }
+
+        if ($type === 'renewal') {
+            $email->sendRenewalReminder($user, $sub->plan, (float) ($sub->plan?->price ?? 0));
+        } else {
+            $email->sendPaymentReminder($user, $sub->days_overdue);
+        }
+
+        AuditLog::record('subscription.reminder_sent', $sub, ['type' => $type, 'to' => $user->email]);
+        return response()->json(['success' => true, 'email' => $user->email]);
+    }
+
+    public function subscriptionPreviewOverdue(Request $request)
+    {
+        $keepData = $request->boolean('keep_data');
+        $args = ['--dry-run' => true];
+        if ($keepData) $args['--keep-data'] = true;
+        Artisan::call('subscriptions:check-overdue', $args);
+        $output = trim(Artisan::output());
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
+    public function subscriptionProcessOverdue(Request $request)
+    {
+        $keepData = $request->boolean('keep_data');
+        Artisan::call('subscriptions:check-overdue', $keepData ? ['--keep-data' => true] : []);
+        $output = trim(Artisan::output());
+        AuditLog::record('subscription.process_overdue', null, ['output' => $output, 'keep_data' => $keepData]);
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
+    public function subscriptionProcessReminders()
+    {
+        Artisan::call('subscriptions:send-payment-reminders');
+        $paymentOutput = trim(Artisan::output());
+        Artisan::call('subscriptions:send-renewal-reminders');
+        $renewalOutput = trim(Artisan::output());
+        $output = "Rappels de paiement :\n{$paymentOutput}\n\nRappels de renouvellement :\n{$renewalOutput}";
+        AuditLog::record('subscription.process_reminders', null, ['output' => $output]);
+        return response()->json(['success' => true, 'output' => $output]);
+    }
+
     public function subscriptionDetail(string $id)
     {
         $sub = Subscription::with('user', 'plan', 'payments')->findOrFail($id);
@@ -382,6 +521,52 @@ class AdminController extends Controller
         return view('admin.tickets.detail', ['ticket' => $ticket, 'messages' => $ticket->messages()->with('author')->get()]);
     }
 
+    // ─── Stripe ───
+    public function stripeSettings()
+    {
+        $publicKey = config('services.stripe.public_key');
+        $secretKey = config('services.stripe.secret_key');
+        $webhookSecret = config('services.stripe.webhook_secret');
+
+        $maskKey = function (?string $key): string {
+            if (!$key) return '';
+            $len = strlen($key);
+            if ($len <= 12) return substr($key, 0, 3) . str_repeat('•', max(4, $len - 3));
+            return substr($key, 0, 11) . str_repeat('•', 10) . substr($key, -4);
+        };
+        $keyMode = function (?string $key): ?string {
+            if (!$key) return null;
+            if (str_contains($key, '_test_')) return 'test';
+            if (str_contains($key, '_live_')) return 'live';
+            return null;
+        };
+
+        return view('admin.settings.stripe', [
+            'publicKeySet' => (bool) $publicKey,
+            'secretKeySet' => (bool) $secretKey,
+            'webhookSecretSet' => (bool) $webhookSecret,
+            'publicKeyMasked' => $maskKey($publicKey),
+            'secretKeyMasked' => $maskKey($secretKey),
+            'webhookSecretMasked' => $maskKey($webhookSecret),
+            'mode' => $keyMode($secretKey),
+        ]);
+    }
+
+    public function stripeCheckConnection(StripeService $stripe)
+    {
+        if (!config('services.stripe.secret_key')) {
+            return response()->json(['success' => false, 'message' => "Aucune clé secrète Stripe configurée dans le fichier .env (STRIPE_SECRET_KEY)."], 422);
+        }
+        return response()->json($stripe->checkConnection());
+    }
+
+    public function stripeTestPayment(StripeService $stripe)
+    {
+        $result = $stripe->testPayment();
+        AuditLog::record('stripe.test_payment', null, $result);
+        return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
     // ─── SMTP & Email Templates ───
     public function smtpConfig(Request $request, EmailService $mail)
     {
@@ -400,8 +585,52 @@ class AdminController extends Controller
         return view('admin.settings.smtp', compact('config'));
     }
 
+    public function restorationFeeSettings(Request $request)
+    {
+        $settings = AppSetting::current();
+        if ($request->isMethod('post')) {
+            $data = $request->validate(['restoration_fee' => 'required|numeric|min:0']);
+            $settings->update($data);
+            return back()->with('success', 'Frais de restauration mis à jour.');
+        }
+        return view('admin.settings.restoration-fee', compact('settings'));
+    }
+
+    public function urssafReportSettings(Request $request)
+    {
+        $settings = AppSetting::current();
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'urssaf_report_day' => 'required|integer|min:1|max:28',
+                'urssaf_report_email' => 'required|email',
+            ]);
+            $settings->update($data);
+            return back()->with('success', 'Paramètres de déclaration URSSAF mis à jour.');
+        }
+        $reports = UrssafReport::orderByDesc('period_month')->take(24)->get();
+        return view('admin.settings.urssaf-report', compact('settings', 'reports'));
+    }
+
+    public function urssafReportGenerateNow(UrssafReportService $service)
+    {
+        $month = now()->subMonthNoOverflow()->startOfMonth();
+        $report = $service->generateAndSendForMonth($month);
+        return back()->with(
+            $report->status === 'sent' ? 'success' : 'error',
+            $report->status === 'sent'
+                ? "Rapport pour {$month->format('m/Y')} généré et envoyé à {$report->sent_to}."
+                : "Erreur lors de la génération/envoi : {$report->error}"
+        );
+    }
+
+    public function urssafReportDownload(string $id)
+    {
+        $report = UrssafReport::findOrFail($id);
+        return Storage::disk('local')->download($report->pdf_path, 'declaration-urssaf-' . $report->period_month->format('Y-m') . '.pdf');
+    }
+
     public function emailTemplates() { return view('admin.settings.email-templates', ['templates' => EmailTemplate::all()]); }
-    public function emailTemplateEdit(string $id = null, Request $request)
+    public function emailTemplateEdit(Request $request, ?string $id = null)
     {
         $tpl = $id ? EmailTemplate::findOrFail($id) : null;
         if ($request->isMethod('post')) {
@@ -416,37 +645,86 @@ class AdminController extends Controller
     // ─── Lyrics Management ───
     public function lyrics(Request $request, NavidromeService $nd)
     {
-        $songs = [];
-        $q = $request->input('q');
-        if ($q) {
-            try { $songs = $nd->searchSongs($q, 50); } catch (\Exception $e) {}
+        $q       = (string) $request->input('q', '');
+        $page    = max(1, (int) $request->input('page', 1));
+        $perPage = 100;
+        $start   = ($page - 1) * $perPage;
+        $songs   = [];
+        $total   = 0;
+
+        try {
+            $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC', $q);
+            $songs  = $result['data'];
+            $total  = $result['total'];
+        } catch (\Exception $e) {}
+
+        // Build host LRC paths and batch-check existence
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        $lrcPathMap = [];
+        foreach ($songs as $song) {
+            $path = $song['path'] ?? null;
+            if (!$path) continue;
+            if ($musicHostPath && str_starts_with($path, $containerMusicPath . '/')) {
+                $hostPath = rtrim($musicHostPath, '/') . substr($path, strlen($containerMusicPath));
+            } elseif (str_starts_with($path, '/')) {
+                $hostPath = $path;
+            } else {
+                $hostPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($path, '/');
+            }
+            $lrcPathMap[$song['id']] = preg_replace('/\.[^.]+$/', '.lrc', $hostPath);
         }
-        return view('admin.lyrics.index', compact('songs', 'q'));
+
+        $existingLrc = [];
+        if (!empty($lrcPathMap)) {
+            try { $existingLrc = $nd->batchCheckLrc(array_values($lrcPathMap)); } catch (\Exception $e) {}
+        }
+
+        foreach ($songs as &$song) {
+            $lrcPath = $lrcPathMap[$song['id']] ?? null;
+            $song['hasLyrics'] = $lrcPath !== null && in_array($lrcPath, $existingLrc);
+        }
+        unset($song);
+
+        $lastPage = $total > 0 ? (int) ceil($total / $perPage) : 1;
+        return view('admin.lyrics.index', compact('songs', 'q', 'page', 'perPage', 'total', 'lastPage'));
     }
 
-    public function lyricsEdit(string $id, NavidromeService $nd)
+    public function lyricsGet(string $id, NavidromeService $nd)
     {
-        $song = $nd->getSong($id);
-        $lrcContent = $nd->getLyricsBySongId($id) ?? '';
-        return view('admin.lyrics.edit', compact('song', 'lrcContent'));
+        $lrc = $nd->getLyricsBySongId($id) ?? '';
+        return response()->json(['lrc' => $lrc]);
     }
 
     public function lyricsSave(string $id, Request $request, NavidromeService $nd)
     {
-        $song = $nd->getSong($id);
+        $song       = $nd->getSong($id);
         $lrcContent = $request->input('lrc_content', '');
+        $songPath   = $song['path'] ?? null;
 
-        $musicPath = config('navidrome.music_path');
-        $songPath = $song['path'] ?? null;
         if (!$songPath) {
-            return back()->with('error', 'Chemin du fichier audio introuvable.');
+            $err = 'Chemin du fichier audio introuvable.';
+            return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
-        $lrcPath = preg_replace('/\.[^.]+$/', '.lrc', $musicPath . '/' . ltrim($songPath, '/'));
+
+        // Translate container path to host path
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        if ($musicHostPath && str_starts_with($songPath, $containerMusicPath . '/')) {
+            $fullPath = rtrim($musicHostPath, '/') . substr($songPath, strlen($containerMusicPath));
+        } elseif (str_starts_with($songPath, '/')) {
+            $fullPath = $songPath;
+        } else {
+            $fullPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($songPath, '/');
+        }
+
+        $lrcPath = preg_replace('/\.[^.]+$/', '.lrc', $fullPath);
 
         try {
-            $result = $nd->sshWriteFile($lrcPath, $lrcContent);
+            $result = $nd->writeLrcViaSSH($lrcPath, $lrcContent);
             if ($result['exitCode'] !== 0) {
-                return back()->with('error', 'Erreur ecriture LRC : ' . $result['output']);
+                $err = 'Erreur écriture LRC : ' . $result['output'];
+                return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
             }
             $nd->triggerScan();
         } catch (\RuntimeException $e) {
@@ -456,7 +734,93 @@ class AdminController extends Controller
         }
 
         AuditLog::record('lyrics.save', null, ['song_id' => $id, 'title' => $song['title'] ?? '']);
-        return back()->with('success', 'Paroles enregistrees. Un scan Navidrome a ete lance.');
+        return $request->expectsJson()
+            ? response()->json(['success' => true])
+            : back()->with('success', 'Paroles enregistrées. Un scan Navidrome a été lancé.');
+    }
+
+    public function lyricsDownload(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $params = ['track_name' => $song['title'] ?? '', 'artist_name' => $song['artist'] ?? ''];
+        if (!empty($song['album']))    $params['album_name'] = $song['album'];
+        if (!empty($song['duration'])) $params['duration']   = (int) $song['duration'];
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(10)
+                ->get('https://lrclib.net/api/get', $params);
+            if ($res->status() === 404) {
+                return response()->json(['error' => 'Paroles introuvables sur LRCLIB.'], 404);
+            }
+            $res->throw();
+            $data = $res->json();
+            $lrc  = $data['syncedLyrics'] ?? $data['plainLyrics'] ?? null;
+            if (!$lrc) {
+                return response()->json(['error' => 'Aucune parole disponible sur LRCLIB.'], 404);
+            }
+            return response()->json(['lrc' => $lrc, 'synced' => !empty($data['syncedLyrics'])]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function lyricsMissing(NavidromeService $nd)
+    {
+        $missing            = [];
+        $start              = 0;
+        $perPage            = 2000;
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+
+        do {
+            try {
+                $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC');
+                $page   = $result['data'];
+                $total  = $result['total'];
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+
+            $lrcPathMap = [];
+            foreach ($page as $song) {
+                $path = $song['path'] ?? null;
+                if (!$path) continue;
+                if ($musicHostPath && str_starts_with($path, $containerMusicPath . '/')) {
+                    $hostPath = rtrim($musicHostPath, '/') . substr($path, strlen($containerMusicPath));
+                } elseif (str_starts_with($path, '/')) {
+                    $hostPath = $path;
+                } else {
+                    $hostPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($path, '/');
+                }
+                $lrcPathMap[$song['id']] = preg_replace('/\.[^.]+$/', '.lrc', $hostPath);
+            }
+
+            $existingLrc = [];
+            if (!empty($lrcPathMap)) {
+                try { $existingLrc = $nd->batchCheckLrc(array_values($lrcPathMap)); } catch (\Exception $e) {}
+            }
+
+            foreach ($page as $song) {
+                $lrcPath = $lrcPathMap[$song['id']] ?? null;
+                if (!$lrcPath || !in_array($lrcPath, $existingLrc)) {
+                    $missing[] = ['id' => $song['id'], 'title' => $song['title'] ?? '', 'artist' => $song['artist'] ?? '', 'album' => $song['album'] ?? ''];
+                }
+            }
+
+            $start += $perPage;
+            if (count($page) === $perPage && $start < $total) {
+                usleep(300000); // 300 ms between pages to avoid rate limiting
+            }
+        } while (count($page) === $perPage && $start < $total);
+
+        return response()->json($missing);
+    }
+
+    public function lyricsEdit(string $id, NavidromeService $nd)
+    {
+        $song = $nd->getSong($id);
+        $lrcContent = $nd->getLyricsBySongId($id) ?? '';
+        return view('admin.lyrics.edit', compact('song', 'lrcContent'));
     }
 
     public function lyricsStream(string $id, NavidromeService $nd)
@@ -474,12 +838,22 @@ class AdminController extends Controller
     // ─── Metadata Management ───
     public function metadata(Request $request, NavidromeService $nd)
     {
-        $songs = [];
-        $q = $request->input('q');
-        if ($q) {
-            try { $songs = $nd->searchSongs($q, 50); } catch (\Exception $e) {}
-        }
-        return view('admin.metadata.index', compact('songs', 'q'));
+        $q       = (string) $request->input('q', '');
+        $page    = max(1, (int) $request->input('page', 1));
+        $perPage = 100;
+        $start   = ($page - 1) * $perPage;
+        $songs   = [];
+        $total   = 0;
+
+        try {
+            $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC', $q);
+            $songs  = $result['data'];
+            $total  = $result['total'];
+        } catch (\Exception $e) {}
+
+        $lastPage = $total > 0 ? (int) ceil($total / $perPage) : 1;
+
+        return view('admin.metadata.index', compact('songs', 'q', 'page', 'perPage', 'total', 'lastPage'));
     }
 
     public function metadataEdit(string $id, NavidromeService $nd)
@@ -509,11 +883,20 @@ class AdminController extends Controller
         $song = $nd->getSong($id);
         $songPath = $song['path'] ?? null;
         if (!$songPath) {
-            return back()->with('error', 'Chemin du fichier audio introuvable.');
+            $err = 'Chemin du fichier audio introuvable.';
+            return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
 
-        $musicPath = config('navidrome.music_path');
-        $fullPath = $musicPath . '/' . ltrim($songPath, '/');
+        // Translate container path to host path (same logic as duplicate delete).
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        if ($musicHostPath && str_starts_with($songPath, $containerMusicPath . '/')) {
+            $fullPath = rtrim($musicHostPath, '/') . substr($songPath, strlen($containerMusicPath));
+        } elseif (str_starts_with($songPath, '/')) {
+            $fullPath = $songPath;
+        } else {
+            $fullPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($songPath, '/');
+        }
 
         $tagMap = [
             'title' => 'title', 'artist' => 'artist', 'albumArtist' => 'album_artist',
@@ -530,23 +913,172 @@ class AdminController extends Controller
         }
 
         if (!$metaArgs) {
-            return back()->with('error', 'Aucune modification.');
+            $err = 'Aucune modification.';
+            return $request->expectsJson() ? response()->json(['error' => $err], 422) : back()->with('error', $err);
         }
 
+        $ext     = pathinfo($fullPath, PATHINFO_EXTENSION);
+        $tmpFile = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
         $escaped = escapeshellarg($fullPath);
-        $tmpPath = escapeshellarg($fullPath . '.tmp');
-        $cmd = "ffmpeg -i {$escaped} -c copy{$metaArgs} -y {$tmpPath} && mv -f {$tmpPath} {$escaped}";
+        $tmpPath = escapeshellarg($tmpFile);
+        // sh -c wrapper ensures sudo covers ffmpeg + mv as a unit
+        $cmd = 'sh -c ' . escapeshellarg("ffmpeg -i {$escaped} -c copy{$metaArgs} -y {$tmpPath} && mv -f {$tmpPath} {$escaped}");
 
         try {
             $result = $nd->sshCommand($cmd);
             if ($result['exitCode'] !== 0) {
-                return back()->with('error', 'Erreur ffmpeg : ' . $result['output']);
+                $err = 'Erreur ffmpeg : ' . $result['output'];
+                return $request->expectsJson()
+                    ? response()->json(['error' => $err], 422)
+                    : back()->with('error', $err);
             }
             $nd->triggerScan();
             AuditLog::record('metadata.update', null, ['song_id' => $id, 'fields' => array_keys(array_filter($data, fn ($v) => $v !== null && $v !== ''))]);
-            return back()->with('success', 'Metadonnees mises a jour. Scan Navidrome lance.');
+            return $request->expectsJson()
+                ? response()->json(['success' => true])
+                : back()->with('success', 'Metadonnees mises a jour. Scan Navidrome lance.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Erreur : ' . $e->getMessage());
+            $err = 'Erreur : ' . $e->getMessage();
+            return $request->expectsJson()
+                ? response()->json(['error' => $err], 500)
+                : back()->with('error', $err);
+        }
+    }
+
+    public function metadataCoverArt(string $id, NavidromeService $nd)
+    {
+        try {
+            $stream = $nd->getCoverArt($id, 120);
+            return response()->stream(function () use ($stream) {
+                echo $stream->body();
+            }, 200, [
+                'Content-Type'  => 'image/jpeg',
+                'Cache-Control' => 'private, max-age=300',
+            ]);
+        } catch (\Exception) {
+            abort(404);
+        }
+    }
+
+    public function metadataMissingCovers(NavidromeService $nd)
+    {
+        $missing = [];
+        $start   = 0;
+        $perPage = 500;
+
+        do {
+            try {
+                $result = $nd->getAllSongsPaginated($start, $perPage, 'title', 'ASC');
+                $page   = $result['data'];
+                $total  = $result['total'];
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+
+            foreach ($page as $song) {
+                // coverArt absent or empty means no embedded/folder art
+                if (empty($song['coverArt'])) {
+                    $missing[] = [
+                        'id'     => $song['id'],
+                        'title'  => $song['title']  ?? '',
+                        'artist' => $song['artist']  ?? '',
+                        'album'  => $song['album']   ?? '',
+                    ];
+                }
+            }
+
+            $start += $perPage;
+        } while (count($page) === $perPage && $start < $total);
+
+        return response()->json($missing);
+    }
+
+    public function metadataSearchArtwork(Request $request)
+    {
+        $q = trim($request->input('q', ''));
+        if (!$q) return response()->json([]);
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(8)
+                ->get('https://itunes.apple.com/search', [
+                    'term'   => $q,
+                    'entity' => 'album',
+                    'limit'  => 8,
+                ]);
+            $results = collect($res->json('results') ?? [])
+                ->filter(fn ($r) => isset($r['artworkUrl100']))
+                ->map(fn ($r) => [
+                    'thumb' => $r['artworkUrl100'],
+                    'full'  => str_replace('100x100bb', '600x600bb', $r['artworkUrl100']),
+                    'label' => ($r['artistName'] ?? '') . ' — ' . ($r['collectionName'] ?? ''),
+                ])
+                ->values();
+            return response()->json($results);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function metadataCover(string $id, Request $request, NavidromeService $nd)
+    {
+        $data = $request->validate(['artwork_url' => 'required|url|max:500']);
+
+        $song     = $nd->getSong($id);
+        $songPath = $song['path'] ?? null;
+        if (!$songPath) {
+            return response()->json(['error' => 'Fichier introuvable.'], 422);
+        }
+
+        // Translate container path to host path
+        $musicHostPath      = config('navidrome.music_host_path');
+        $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+        if ($musicHostPath && str_starts_with($songPath, $containerMusicPath . '/')) {
+            $fullPath = rtrim($musicHostPath, '/') . substr($songPath, strlen($containerMusicPath));
+        } elseif (str_starts_with($songPath, '/')) {
+            $fullPath = $songPath;
+        } else {
+            $fullPath = rtrim(config('navidrome.music_path', ''), '/') . '/' . ltrim($songPath, '/');
+        }
+
+        try {
+            $tmpCover = '/tmp/mf_cover_' . $id . '.jpg';
+            $eCover   = escapeshellarg($tmpCover);
+            $eUrl     = escapeshellarg($data['artwork_url']);
+
+            // Let the Synology download the artwork directly — avoids SCP entirely.
+            // curl is available on Synology DSM; wget is the fallback.
+            $download = $nd->sshCommand("curl -sS -L --max-time 20 -o {$eCover} {$eUrl}");
+            if ($download['exitCode'] !== 0) {
+                $download = $nd->sshCommand("wget -q -O {$eCover} {$eUrl}");
+                if ($download['exitCode'] !== 0) {
+                    return response()->json(['error' => 'Impossible de télécharger la pochette sur le Synology : ' . $download['output']], 422);
+                }
+            }
+
+            // Build ffmpeg command to embed cover art (works for MP3 and FLAC).
+            // Wrapped in sh -c so that sudo applies to ffmpeg + mv + rm as a unit —
+            // without this, only ffmpeg runs as root; mv/rm fail on root-owned files.
+            $ext     = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+            $tmpSong = preg_replace('/\.[^.]+$/', '.__tmp__.' . $ext, $fullPath);
+            $eSong   = escapeshellarg($fullPath);
+            $eTmp    = escapeshellarg($tmpSong);
+
+            $inner = "ffmpeg -i {$eSong} -i {$eCover} -map 0:a -map 1:v -c:a copy -c:v copy"
+                   . " -id3v2_version 3 -disposition:v:0 attached_pic"
+                   . " -y {$eTmp} && mv -f {$eTmp} {$eSong} && rm -f {$eCover}";
+            $cmd = 'sh -c ' . escapeshellarg($inner);
+
+            $result = $nd->sshCommand($cmd);
+            if ($result['exitCode'] !== 0) {
+                $nd->sshCommand('sh -c ' . escapeshellarg("rm -f {$eCover}"));
+                return response()->json(['error' => 'Erreur ffmpeg : ' . $result['output']], 422);
+            }
+
+            $nd->triggerScan();
+            AuditLog::record('metadata.cover', null, ['song_id' => $id]);
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -599,44 +1131,188 @@ class AdminController extends Controller
         return view('admin.duplicates.index', compact('duplicates', 'crossAlbum', 'scanned', 'mode'));
     }
 
+    public function duplicateScanStatus(NavidromeService $nd)
+    {
+        return response()->json($nd->getScanStatus());
+    }
+
     public function duplicateBatchDelete(Request $request, NavidromeService $nd)
     {
-        $ids = $request->input('ids', []);
+        $ids    = $request->input('ids', []);
+        $paths  = $request->input('paths', []);
+        $titles = $request->input('titles', []);
+
         if (empty($ids)) {
-            return back()->with('error', 'Aucun fichier selectionne.');
+            return back()->with('error', 'Aucun fichier sélectionné.');
         }
 
+        // paths[] and ids[] are submitted together from the view — no need to
+        // re-fetch each song individually from Navidrome (avoids N×HTTP timeouts).
         $musicPath = config('navidrome.music_path');
-        $deleted = 0;
-        $errors = [];
-        $paths = [];
-        $songs = [];
+        $fullPaths = [];
+        $errors    = [];
 
-        foreach ($ids as $id) {
-            try {
-                $song = $nd->getSong($id);
-                $songPath = $song['path'] ?? null;
-                if (!$songPath) {
-                    $errors[] = "{$song['title']} : chemin introuvable";
-                    continue;
-                }
-                $fullPath = $musicPath . '/' . ltrim($songPath, '/');
-                $paths[] = $fullPath;
-                $songs[$id] = ['title' => $song['title'] ?? '', 'path' => $fullPath];
-            } catch (\Exception $e) {
-                $errors[] = "ID {$id} : {$e->getMessage()}";
+        foreach ($ids as $i => $id) {
+            $songPath = $paths[$i] ?? null;
+            if (!$songPath) {
+                continue; // stream or remote track — no local file to delete
             }
+            // Navidrome's internal API returns full absolute paths already.
+            // Only prepend music_path when the stored path is relative.
+            $fullPath = str_starts_with($songPath, '/') ? $songPath : ($musicPath . '/' . ltrim($songPath, '/'));
+            $fullPaths[$id] = [
+                'path'  => $fullPath,
+                'title' => $titles[$i] ?? '',
+            ];
         }
 
-        if (!empty($paths)) {
+        $deleted = 0;
+        if (!empty($fullPaths)) {
             try {
-                $encoded = base64_encode(implode("\n", $paths));
-                $result = $nd->sshCommand("echo {$encoded} | base64 -d | tr '\\n' '\\0' | xargs -0 rm -f");
-                if ($result['exitCode'] === 0) {
-                    $deleted = count($paths);
-                    foreach ($songs as $id => $info) {
-                        AuditLog::record('duplicate.delete', null, ['song_id' => $id, 'title' => $info['title'], 'path' => $info['path']]);
+                $pathList = implode("\n", array_column($fullPaths, 'path'));
+                $encoded  = base64_encode($pathList);
+
+                // 1. Supprimer les fichiers physiques.
+                //
+                // Strategy A — music_host_path configured:
+                //   Navidrome is in Docker. Paths in the DB are container-internal
+                //   (e.g. /music/Artist/file.flac). We map them to host paths by
+                //   replacing the container prefix with NAVIDROME_MUSIC_HOST_PATH,
+                //   then run rm directly on the SSH host. No docker exec needed.
+                //
+                // Strategy B — docker_container configured, no music_host_path:
+                //   Run rm inside the container via docker exec (legacy behaviour).
+                //
+                // Strategy C — neither:
+                //   Run rm directly on the SSH host with the paths as-is.
+                //
+                // The script echoes DELETED:/MISSING:/FAILED: per file.
+
+                $musicHostPath      = config('navidrome.music_host_path');
+                $containerMusicPath = rtrim(config('navidrome.container_music_path', '/music'), '/');
+                $container          = config('navidrome.docker_container');
+
+                if ($musicHostPath) {
+                    // Strategy A: translate container paths to host paths
+                    $musicHostPath = rtrim($musicHostPath, '/');
+                    $translatedList = implode("\n", array_map(
+                        fn($p) => str_starts_with($p, $containerMusicPath . '/')
+                            ? $musicHostPath . substr($p, strlen($containerMusicPath))
+                            : $p,
+                        array_column($fullPaths, 'path')
+                    ));
+                    $encodedHost  = base64_encode($translatedList);
+                    $innerScript  = 'echo ' . $encodedHost . ' | base64 -d | '
+                        . 'while IFS= read -r f; do '
+                        .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                        .   'else echo "MISSING:$f"; fi; '
+                        . 'done';
+                    $script = $innerScript;
+                } elseif ($container) {
+                    // Strategy B: delete inside Docker container
+                    $innerScript = 'echo ' . $encoded . ' | base64 -d | '
+                        . 'while IFS= read -r f; do '
+                        .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                        .   'else echo "MISSING:$f"; fi; '
+                        . 'done';
+                    $script = 'docker exec ' . escapeshellarg($container) . ' sh -c ' . escapeshellarg($innerScript);
+                } else {
+                    // Strategy C: direct SSH host deletion
+                    $innerScript = 'echo ' . $encoded . ' | base64 -d | '
+                        . 'while IFS= read -r f; do '
+                        .   'if [ -f "$f" ]; then rm -f "$f" && echo "DELETED:$f" || echo "FAILED:$f"; '
+                        .   'else echo "MISSING:$f"; fi; '
+                        . 'done';
+                    $script = $innerScript;
+                }
+
+                $result = $nd->sshCommand($script);
+
+                // When using Strategy A (host path), DELETED/MISSING markers use host
+                // paths. Re-map them back to container paths so DB lookup still works.
+                $hostToContainer = [];
+                if ($musicHostPath) {
+                    foreach ($fullPaths as $id => $info) {
+                        $containerPath = $info['path'];
+                        $hostPath = str_starts_with($containerPath, $containerMusicPath . '/')
+                            ? $musicHostPath . substr($containerPath, strlen($containerMusicPath))
+                            : $containerPath;
+                        $hostToContainer[$hostPath] = $containerPath;
                     }
+                }
+
+                // Parser la sortie ligne par ligne.
+                // Si Strategy A, les chemins dans la sortie sont des chemins HOST.
+                // On les retraduit en chemins conteneur pour matcher $fullPaths (indexé par chemin conteneur).
+                $actualDeleted = [];
+                $missing       = [];
+                $failed        = [];
+                $remap = fn($p) => $hostToContainer[$p] ?? $p;
+                foreach (explode("\n", trim($result['output'] ?? '')) as $line) {
+                    $line = trim($line);
+                    if (str_starts_with($line, 'DELETED:')) $actualDeleted[] = $remap(substr($line, 8));
+                    elseif (str_starts_with($line, 'MISSING:')) $missing[]   = $remap(substr($line, 8));
+                    elseif (str_starts_with($line, 'FAILED:'))  $failed[]    = $remap(substr($line, 7));
+                }
+
+                if ($result['exitCode'] === 0) {
+                    $deleted = count($actualDeleted);
+
+                    // N'audit que les fichiers réellement supprimés
+                    $pathToId = [];
+                    foreach ($fullPaths as $id => $info) {
+                        $pathToId[$info['path']] = ['id' => $id, 'title' => $info['title']];
+                    }
+                    foreach ($actualDeleted as $path) {
+                        $meta = $pathToId[$path] ?? null;
+                        AuditLog::record('duplicate.delete', null, [
+                            'song_id' => $meta['id'] ?? null,
+                            'title'   => $meta['title'] ?? basename($path),
+                            'path'    => $path,
+                        ]);
+                    }
+                    if (!empty($missing)) {
+                        $hint = $musicHostPath ? '' : ' — Configurez NAVIDROME_MUSIC_HOST_PATH dans .env si Navidrome est dans Docker';
+                        $errors[] = count($missing) . ' fichier(s) introuvable(s) sur le serveur (chemin : ' . (array_column($fullPaths, 'path')[0] ?? '?') . ')' . $hint;
+                    }
+                    if (!empty($failed)) {
+                        $errors[] = count($failed) . ' suppression(s) échouée(s) (droits ?)';
+                    }
+
+                    // 2. Supprimer de la BDD les entrées dont le fichier n'est plus sur disque
+                    //    (supprimés avec succès + déjà absents = ghost entries).
+                    //    Les fichiers en échec (droits) restent sur disque → on les garde en BDD.
+                    $goneFromDisk = array_merge($actualDeleted, $missing);
+                    $idsToRemove  = [];
+                    foreach ($goneFromDisk as $path) {
+                        if (isset($pathToId[$path])) {
+                            $idsToRemove[] = $pathToId[$path]['id'];
+                        }
+                    }
+
+                    if (!empty($idsToRemove)) {
+                        $safeIds = array_map(fn($id) => str_replace("'", "''", $id), $idsToRemove);
+                        $inList  = "'" . implode("','", $safeIds) . "'";
+                        $sqlStmt = "DELETE FROM media_file WHERE id IN ({$inList});";
+
+                        $container = config('navidrome.docker_container');
+                        $dbPath    = config('navidrome.db_path');
+
+                        if ($container) {
+                            $nd->sshCommand(
+                                'docker exec ' . escapeshellarg($container) .
+                                ' sqlite3 ' . escapeshellarg($dbPath) .
+                                ' ' . escapeshellarg($sqlStmt)
+                            );
+                        } elseif ($dbPath) {
+                            $nd->sshCommand(
+                                'sqlite3 ' . escapeshellarg($dbPath) . ' ' . escapeshellarg($sqlStmt)
+                            );
+                        }
+                    }
+
+                    // Scan léger pour recalculer les compteurs album/artiste
+                    $nd->triggerScan(false);
                 } else {
                     $errors[] = $result['output'];
                 }
@@ -645,8 +1321,13 @@ class AdminController extends Controller
             }
         }
 
+        $total = count($fullPaths);
         if ($deleted > 0) {
-            $nd->triggerScan(true);
+            $msg = "{$deleted}/{$total} fichier(s) supprimé(s) du serveur et retirés de la bibliothèque Navidrome.";
+        } elseif ($total > 0) {
+            $msg = '';
+        } else {
+            $msg = '';
         }
 
         $msg = $deleted > 0 ? "{$deleted} fichier(s) supprime(s). Le scan complet Navidrome est en cours, patientez quelques instants avant de rescanner." : '';
@@ -654,6 +1335,41 @@ class AdminController extends Controller
             $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
         }
         return redirect('/admin/duplicates')->with($deleted > 0 ? 'success' : 'error', $msg);
+        if (!empty($errors)) {
+            $msg .= ($msg ? ' ' : '') . 'Erreurs : ' . implode(', ', $errors);
+        }
+
+        $redirect = redirect('/admin/duplicates');
+        if ($deleted > 0) {
+            $redirect = $redirect->with('success', $msg);
+        } else {
+            $redirect = $redirect->with('error', $msg ?: 'Aucun fichier à supprimer.');
+        }
+        return $redirect;
+    }
+
+    // ─── Email Logs ───
+    public function emailLogs(Request $request)
+    {
+        $q      = (string) $request->input('q', '');
+        $status = (string) $request->input('status', '');
+        $type   = (string) $request->input('type', '');
+
+        $query = \App\Models\EmailLog::latest();
+        if ($q)      $query->where(fn ($b) => $b->where('to', 'like', "%{$q}%")->orWhere('subject', 'like', "%{$q}%"));
+        if ($status) $query->where('status', $status);
+        if ($type)   $query->where('template_type', $type);
+
+        $logs  = $query->paginate(50)->withQueryString();
+        $types = \App\Models\EmailLog::distinct()->orderBy('template_type')->pluck('template_type')->filter()->values();
+
+        return view('admin.email-logs.index', compact('logs', 'q', 'status', 'type', 'types'));
+    }
+
+    public function emailLogPreview(string $id)
+    {
+        $log = \App\Models\EmailLog::findOrFail($id);
+        return response($log->html_body, 200)->header('Content-Type', 'text/html; charset=utf-8');
     }
 
     // ─── Audit Logs ───
@@ -662,6 +1378,77 @@ class AdminController extends Controller
         $q = AuditLog::with('admin')->latest();
         if ($action = $request->input('action')) $q->where('action', 'like', "{$action}%");
         return view('admin.audit-logs', ['logs' => $q->paginate(50)]);
+    }
+
+    // ─── Server Logs ───
+    public function serverLogs(Request $request)
+    {
+        $logFile = storage_path('logs/laravel.log');
+        $lines   = (int) $request->input('lines', 200);
+        $lines   = max(50, min(2000, $lines));
+        $filter  = $request->input('filter', '');
+
+        $entries = [];
+        if (file_exists($logFile)) {
+            // Lire les N dernières lignes efficacement sans charger tout le fichier
+            $content = $this->tailFile($logFile, $lines * 10); // sur-lire pour filtrer
+            $raw = explode("\n", $content);
+
+            $current = null;
+            foreach ($raw as $line) {
+                // Nouvelle entrée de log : commence par [YYYY-MM-DD
+                if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.+)/', $line, $m)) {
+                    if ($current !== null) $entries[] = $current;
+                    $current = [
+                        'datetime' => $m[1],
+                        'env'      => $m[2],
+                        'level'    => strtolower($m[3]),
+                        'message'  => $m[4],
+                        'context'  => '',
+                        'raw'      => $line,
+                    ];
+                } elseif ($current !== null) {
+                    $current['context'] .= "\n" . $line;
+                    $current['raw']     .= "\n" . $line;
+                }
+            }
+            if ($current !== null) $entries[] = $current;
+
+            // Appliquer filtre texte
+            if ($filter !== '') {
+                $entries = array_filter($entries, fn($e) =>
+                    stripos($e['raw'], $filter) !== false
+                );
+            }
+
+            // Garder les N dernières entrées
+            $entries = array_slice(array_values($entries), -$lines);
+            $entries = array_reverse($entries); // plus récent en premier
+        }
+
+        return view('admin.logs', compact('entries', 'lines', 'filter', 'logFile'));
+    }
+
+    private function tailFile(string $path, int $maxLines): string
+    {
+        $fp   = fopen($path, 'rb');
+        $size = filesize($path);
+        if (!$fp || $size === 0) return '';
+
+        $chunk  = 65536; // 64 KB
+        $buffer = '';
+        $pos    = $size;
+        $found  = 0;
+
+        while ($pos > 0 && $found < $maxLines) {
+            $read   = min($chunk, $pos);
+            $pos   -= $read;
+            fseek($fp, $pos);
+            $buffer = fread($fp, $read) . $buffer;
+            $found  = substr_count($buffer, "\n");
+        }
+        fclose($fp);
+        return $buffer;
     }
 
     // ─── Feedbacks ───
@@ -713,9 +1500,37 @@ class AdminController extends Controller
     }
 
     // ─── Newsletters ───
+    // ─── Newsletter helpers ───
+
+    private function getNewsletterLayout(): string
+    {
+        return EmailTemplate::where('template_type', 'newsletter_layout')->value('html_body') ?? '{{ content }}';
+    }
+
+    private function applyNewsletterLayout(string $content): string
+    {
+        $layout = $this->getNewsletterLayout();
+        return str_replace('{{ content }}', $content, $layout);
+    }
+
+    // ─── Newsletters ───
+
     public function newsletters()
     {
         return view('admin.newsletters.list', ['newsletters' => Newsletter::latest()->paginate(25)]);
+    }
+
+    public function newsletterTemplate(Request $request)
+    {
+        $tpl = EmailTemplate::firstOrCreate(
+            ['template_type' => 'newsletter_layout'],
+            ['subject' => '', 'html_body' => '{{ content }}', 'is_active' => true]
+        );
+        if ($request->isMethod('post')) {
+            $tpl->update(['html_body' => $request->validate(['html_body' => 'required'])['html_body']]);
+            return back()->with('success', 'Template mis à jour.');
+        }
+        return view('admin.newsletters.template', ['template' => $tpl]);
     }
 
     public function newsletterCreate(Request $request)
@@ -725,7 +1540,7 @@ class AdminController extends Controller
             Newsletter::create($data);
             return redirect('/admin/newsletters')->with('success', 'Campagne créée.');
         }
-        return view('admin.newsletters.form', ['newsletter' => null]);
+        return view('admin.newsletters.form', ['newsletter' => null, 'layout' => $this->getNewsletterLayout()]);
     }
 
     public function newsletterEdit(string $id, Request $request)
@@ -736,7 +1551,7 @@ class AdminController extends Controller
             $nl->update($request->validate(['subject' => 'required|max:255', 'html_body' => 'required']));
             return redirect('/admin/newsletters')->with('success', 'Campagne mise à jour.');
         }
-        return view('admin.newsletters.form', ['newsletter' => $nl]);
+        return view('admin.newsletters.form', ['newsletter' => $nl, 'layout' => $this->getNewsletterLayout()]);
     }
 
     public function newsletterSend(string $id, EmailService $mail)
@@ -744,13 +1559,14 @@ class AdminController extends Controller
         $nl = Newsletter::findOrFail($id);
         if ($nl->status === 'sent') return back()->with('error', 'Déjà envoyée.');
 
+        $fullHtml = $this->applyNewsletterLayout($nl->html_body);
         $nl->update(['status' => 'sending']);
         $recipients = User::where('is_admin', false)->where('status', '!=', 'deleted')->where('newsletter_optin', true)->whereNotNull('email_verified_at')->get();
 
         $sent = 0;
         foreach ($recipients as $user) {
             try {
-                $mail->sendNewsletterNow($user, $nl->subject, $nl->html_body);
+                $mail->sendNewsletterNow($user, $nl->subject, $fullHtml);
                 $sent++;
             } catch (\Exception $e) {
                 Log::error("Newsletter send failed for {$user->email}: {$e->getMessage()}");
@@ -765,6 +1581,90 @@ class AdminController extends Controller
     public function newsletterPreview(string $id)
     {
         $nl = Newsletter::findOrFail($id);
-        return response($nl->html_body)->header('Content-Type', 'text/html');
+        $html = $this->applyNewsletterLayout($nl->html_body);
+        foreach (['site_name' => config('app.name'), 'site_url' => config('app.url'), 'sujet' => $nl->subject] as $k => $v) {
+            $html = str_replace("{{ {$k} }}", $v, $html);
+        }
+        return response($html)->header('Content-Type', 'text/html');
+    }
+
+    public function weeklyNewsletterPreview(\App\Services\NavidromeService $nd)
+    {
+        try {
+            $albums    = $nd->getRecentAlbums(10, now()->subDays(7));
+            $topArtists = $nd->getTopPlayedArtists(5);
+        } catch (\Exception $e) {
+            return response("<pre>Erreur Navidrome : " . htmlspecialchars($e->getMessage()) . "</pre>")
+                ->header('Content-Type', 'text/html');
+        }
+
+        $html = \App\Console\Commands\SendWeeklyNewMusic::buildEmail($albums, $topArtists);
+
+        // Replace template variables the same way EmailService does
+        $ctx = ['site_name' => config('app.name'), 'site_url' => config('app.url')];
+        foreach ($ctx as $k => $v) {
+            $html = str_replace("{{ {$k} }}", $v, $html);
+            $html = str_replace("{{{$k}}}", $v, $html);
+        }
+
+        $subscriberCount = \App\Models\User::where('is_admin', false)
+            ->where('status', '!=', 'deleted')
+            ->where('newsletter_optin', true)
+            ->whereNotNull('email_verified_at')
+            ->count();
+
+        $newAlbumCount = count($albums);
+        $banner = "<div style='font-family:sans-serif;background:#1e1b4b;color:#a5b4fc;padding:10px 16px;font-size:13px;border-bottom:2px solid #4f46e5'>"
+            . "⚡ Aperçu — données en temps réel · <strong>{$newAlbumCount}</strong> album(s) ajouté(s) cette semaine · "
+            . "<strong>{$subscriberCount}</strong> destinataire(s) · "
+            . now()->format('d/m/Y H:i')
+            . "</div>";
+
+        return response($banner . $html)->header('Content-Type', 'text/html');
+    }
+
+    // ─── Impersonate ───
+
+    public function impersonate(string $id, Request $request)
+    {
+        $target = User::findOrFail($id);
+
+        if ($target->is_admin) {
+            return back()->with('error', 'Impossible d\'usurper un compte administrateur.');
+        }
+        if ($target->status === 'deleted') {
+            return back()->with('error', 'Impossible d\'usurper un compte supprimé.');
+        }
+
+        $adminId = Auth::id();
+        AuditLog::record('user.impersonate_start', $target, ['admin_id' => $adminId]);
+
+        $request->session()->put('impersonating_admin_id', $adminId);
+        Auth::loginUsingId($target->id);
+
+        return redirect('/portal')->with('success', "Vous naviguez en tant que {$target->username}. Utilisez le bouton « Revenir admin » pour reprendre votre session.");
+    }
+
+    public function stopImpersonate(Request $request)
+    {
+        $adminId = $request->session()->pull('impersonating_admin_id');
+        if (!$adminId) {
+            return redirect('/admin');
+        }
+
+        $admin = User::find($adminId);
+        if (!$admin || !$admin->is_admin) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect('/login')->with('error', 'Session invalide.');
+        }
+
+        $impersonatedUser = Auth::user();
+        AuditLog::record('user.impersonate_stop', $impersonatedUser, ['admin_id' => $adminId]);
+
+        Auth::loginUsingId($adminId);
+
+        return redirect("/admin/users/{$impersonatedUser->id}");
     }
 }

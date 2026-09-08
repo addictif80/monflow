@@ -9,6 +9,8 @@ use Stripe\Checkout\Session;
 use Stripe\Refund as StripeRefund;
 use Stripe\Subscription as StripeSub;
 use Stripe\Webhook;
+use Stripe\Balance;
+use Stripe\PaymentIntent;
 use App\Models\User;
 use App\Models\PromoCode;
 
@@ -164,5 +166,70 @@ class StripeService
     public function constructWebhookEvent(string $payload, string $sigHeader): \Stripe\Event
     {
         return Webhook::constructEvent($payload, $sigHeader, config('services.stripe.webhook_secret'));
+    }
+
+    /**
+     * Vérifie que la clé secrète configurée est valide et que l'API Stripe
+     * est joignable, sans effectuer aucun mouvement d'argent (appel en lecture seule).
+     */
+    public function checkConnection(): array
+    {
+        try {
+            $balance = Balance::retrieve();
+            $available = collect($balance->available ?? [])->map(fn ($b) => [
+                'amount' => $b->amount / 100,
+                'currency' => strtoupper($b->currency),
+            ])->values()->all();
+            return ['success' => true, 'message' => 'Connexion à Stripe établie avec succès.', 'available' => $available];
+        } catch (\Stripe\Exception\AuthenticationException $e) {
+            return ['success' => false, 'message' => 'Clé secrète invalide ou révoquée : ' . $e->getMessage()];
+        } catch (\Exception $e) {
+            return ['success' => false, 'message' => 'Échec de connexion à Stripe : ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Effectue un paiement fictif réel (mode test Stripe uniquement) pour
+     * valider l'intégration de bout en bout : création + confirmation d'un
+     * PaymentIntent avec le moyen de paiement de test officiel de Stripe,
+     * puis remboursement immédiat pour ne laisser aucune trace facturable.
+     */
+    public function testPayment(): array
+    {
+        $secretKey = config('services.stripe.secret_key');
+        if (!str_starts_with((string) $secretKey, 'sk_test_')) {
+            return [
+                'success' => false,
+                'message' => "Le paiement test est désactivé : la clé configurée n'est pas une clé de mode test (sk_test_...). "
+                    . "Utilisez temporairement des clés de test Stripe pour valider le flux de paiement en conditions réelles sans risquer un débit réel.",
+            ];
+        }
+
+        try {
+            $intent = PaymentIntent::create([
+                'amount' => 100, // 1,00 €
+                'currency' => 'eur',
+                'payment_method' => 'pm_card_visa', // moyen de paiement de test officiel Stripe
+                'payment_method_types' => ['card'],
+                'confirm' => true,
+                'description' => 'MonFlow — test d\'intégration Stripe (paiement fictif)',
+            ]);
+
+            $refund = null;
+            if ($intent->status === 'succeeded') {
+                $refund = StripeRefund::create(['payment_intent' => $intent->id]);
+            }
+
+            return [
+                'success' => $intent->status === 'succeeded',
+                'message' => $intent->status === 'succeeded'
+                    ? "Paiement test de 1,00 € effectué et remboursé avec succès. L'intégration Stripe fonctionne correctement de bout en bout."
+                    : "Le paiement test s'est terminé avec le statut '{$intent->status}'.",
+                'payment_intent_id' => $intent->id,
+                'refund_id' => $refund?->id,
+            ];
+        } catch (\Exception $e) {
+            return ['success' => false, 'message' => 'Échec du paiement test : ' . $e->getMessage()];
+        }
     }
 }

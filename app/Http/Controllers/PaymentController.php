@@ -9,6 +9,14 @@ use Illuminate\Support\Facades\{DB, Log, Hash};
 
 class PaymentController extends Controller
 {
+    /**
+     * Page de retour Stripe. Le webhook (handleCheckout) est la seule source de
+     * vérité pour l'activation des abonnements/paiements ; cette page ne fait
+     * qu'un rattrapage optimiste si le webhook n'est pas encore arrivé, et
+     * revalide donc strictement que la session appartient à l'utilisateur
+     * connecté, correspond à un abonnement (pas un wallet top-up/gift), et
+     * n'a pas déjà été traitée (idempotence sur stripe_payment_intent_id).
+     */
     public function success(Request $request)
     {
         $user = $request->user();
@@ -19,8 +27,28 @@ class PaymentController extends Controller
                     $meta = $session->metadata?->toArray() ?? [];
                     $type = $meta['type'] ?? 'subscription';
 
+                    // La session doit avoir été créée pour cet utilisateur précis.
+                    if (($meta['user_id'] ?? null) !== $user->id) {
+                        Log::warning("Success page: session {$sessionId} user_id mismatch for user {$user->id}");
+                        return view('portal.payment-success');
+                    }
+
+                    // Seules les sessions d'abonnement (classique ou prépayé) activent
+                    // un abonnement ici — un wallet top-up ou un gift ne le doivent pas.
+                    if (!in_array($type, ['subscription', 'prepay'], true)) {
+                        return view('portal.payment-success');
+                    }
+
+                    $paymentIntentId = $session->payment_intent ?? '';
+                    // Idempotence : si cette session a déjà été traitée (par ce handler
+                    // ou par le webhook), ne rien refaire pour éviter un rejeu gratuit.
+                    if ($paymentIntentId && Payment::where('stripe_payment_intent_id', $paymentIntentId)->exists()) {
+                        return view('portal.payment-success');
+                    }
+
                     $sub = Subscription::where('user_id', $user->id)->where('status', 'pending')->with('plan')->latest()->first();
                     if ($sub) {
+                        $amount = ($session->amount_total ?? 0) / 100;
                         if ($type === 'prepay') {
                             $plan = $sub->plan;
                             $months = (int) ($meta['months'] ?? 1);
@@ -32,6 +60,7 @@ class PaymentController extends Controller
                         } else {
                             $sub->update(['status' => 'active', 'stripe_subscription_id' => $session->subscription ?? '', 'current_period_start' => now(), 'current_period_end' => now()->addDays($sub->plan->period_days)]);
                         }
+                        Payment::create(['user_id' => $user->id, 'subscription_id' => $sub->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $paymentIntentId, 'description' => 'Abonnement ' . ($sub->plan->name ?? '')]);
 
                         if ($user->status === 'suspended') $user->update(['status' => 'active']);
                         if ($user->navidrome_id) {
@@ -122,11 +151,14 @@ class PaymentController extends Controller
             if (!$plan || !$recipientEmail) return;
             $recipient = User::where('email', $recipientEmail)->first();
             if (!$recipient) {
-                $pw = bin2hex(random_bytes(8));
-                $recipient = User::create(['username' => explode('@', $recipientEmail)[0] . rand(10, 99), 'email' => $recipientEmail, 'password' => Hash::make($pw)]);
-                $recipient->storeEncryptedPassword($pw);
+                // Deux secrets indépendants : le mot de passe du compte n'est jamais
+                // révélé (le destinataire doit passer par "mot de passe oublié"), et
+                // le mot de passe Navidrome ne doit jamais lui être identique.
+                $loginPw = bin2hex(random_bytes(16));
+                $recipient = User::create(['username' => explode('@', $recipientEmail)[0] . rand(10, 99), 'email' => $recipientEmail, 'password' => Hash::make($loginPw)]);
+                $ndPw = $recipient->generateNavidromePassword();
                 Wallet::create(['user_id' => $recipient->id]);
-                try { $r = $nd->createUser($recipient->username, $pw, '', $recipientEmail); $recipient->update(['navidrome_id' => $r['id'] ?? null]); } catch (\Exception $e) {}
+                try { $r = $nd->createUser($recipient->username, $ndPw, '', $recipientEmail); $recipient->update(['navidrome_id' => $r['id'] ?? null]); } catch (\Exception $e) {}
             }
             Subscription::create(['user_id' => $recipient->id, 'plan_id' => $plan->id, 'status' => 'active', 'is_gift' => true, 'gifted_by' => $user->id, 'gift_recipient_email' => $recipientEmail, 'current_period_start' => now(), 'current_period_end' => now()->addDays($plan->period_days)]);
             Payment::create(['user_id' => $user->id, 'amount' => $amount, 'stripe_amount' => $amount, 'status' => 'succeeded', 'payment_method' => 'stripe', 'stripe_payment_intent_id' => $session->payment_intent ?? '', 'description' => "Cadeau {$plan->name} pour {$recipientEmail}"]);

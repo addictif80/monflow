@@ -1,42 +1,44 @@
 @extends('layouts.admin')
 @section('title', 'Éditer paroles — Admin MonFlow')
 @section('content')
-<div class="mb-4"><a href="/admin/lyrics" class="text-gray-400 hover:text-gray-200 text-sm">&larr; Retour</a></div>
+<div class="mb-4">
+    <a href="/admin/lyrics" class="text-sm text-zinc-500 hover:text-zinc-300">&larr; Retour</a>
+</div>
 <div class="flex items-center gap-4 mb-6">
-    <h1 class="text-2xl font-bold">{{ $song['title'] ?? 'Sans titre' }}</h1>
-    <span class="text-gray-400 text-sm">{{ $song['artist'] ?? '' }} — {{ $song['album'] ?? '' }} ({{ gmdate('i:s', $song['duration'] ?? 0) }})</span>
+    <h1 class="text-base font-semibold text-zinc-100">{{ $song['title'] ?? 'Sans titre' }}</h1>
+    <span class="text-zinc-500 text-sm">{{ $song['artist'] ?? '' }} — {{ $song['album'] ?? '' }} ({{ gmdate('i:s', $song['duration'] ?? 0) }})</span>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <div class="space-y-4">
-        <div class="bg-gray-800 border border-gray-700 rounded-lg p-4">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <div class="flex items-center gap-3 mb-3">
-                <button id="playBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium">▶ Écouter</button>
-                <span id="curTime" class="text-xs text-gray-400">0:00</span>
+                <button id="playBtn" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">▶ Écouter</button>
+                <span id="curTime" class="text-xs text-zinc-500">0:00</span>
                 <input id="progress" type="range" min="0" max="100" value="0" class="flex-1 accent-indigo-500">
-                <span id="totTime" class="text-xs text-gray-400">{{ gmdate('i:s', $song['duration'] ?? 0) }}</span>
+                <span id="totTime" class="text-xs text-zinc-500">{{ gmdate('i:s', $song['duration'] ?? 0) }}</span>
             </div>
             <div class="flex gap-2">
-                <button id="stampBtn" class="px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded text-xs font-medium" title="Insère le timestamp au curseur">⏱ Horodater (Ctrl+Entrée)</button>
-                <button id="stampAllBtn" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs" title="Ajoute un timestamp vide sur chaque ligne sans timestamp">Horodater toutes les lignes</button>
+                <button id="stampBtn" class="inline-flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-medium px-3 py-1.5 rounded-lg border border-emerald-500/20 transition" title="Insère le timestamp au curseur">⏱ Horodater (Ctrl+Entrée)</button>
+                <button id="stampAllBtn" class="inline-flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs px-3 py-1.5 rounded-lg border border-zinc-700 transition" title="Ajoute un timestamp vide sur chaque ligne sans timestamp">Horodater toutes les lignes</button>
             </div>
         </div>
 
         <form method="POST" action="/admin/lyrics/{{ $song['id'] }}/save">
             @csrf
-            <div class="bg-gray-800 border border-gray-700 rounded-lg p-4">
-                <label class="block text-sm text-gray-400 mb-2">Paroles LRC</label>
-                <textarea id="lrcEditor" name="lrc_content" rows="20" class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:border-indigo-500 leading-relaxed" placeholder="[00:12.00]Première ligne&#10;[00:17.50]Deuxième ligne&#10;[00:23.80]...">{{ $lrcContent }}</textarea>
-                <p class="text-xs text-gray-500 mt-2">Format : <code>[mm:ss.xx]texte</code> — Utilisez le bouton ⏱ pendant l'écoute pour ajouter les timestamps.</p>
-                <button type="submit" class="mt-3 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium">Enregistrer</button>
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <label class="block text-xs font-medium text-zinc-400 mb-2">Paroles LRC</label>
+                <textarea id="lrcEditor" name="lrc_content" rows="20" class="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 font-mono placeholder-zinc-600 px-3 py-2 outline-none transition leading-relaxed" placeholder="[00:12.00]Première ligne&#10;[00:17.50]Deuxième ligne&#10;[00:23.80]...">{{ $lrcContent }}</textarea>
+                <p class="text-xs text-zinc-600 mt-2">Format : <code>[mm:ss.xx]texte</code> — Utilisez le bouton ⏱ pendant l'écoute pour ajouter les timestamps.</p>
+                <button type="submit" class="mt-3 inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">Enregistrer</button>
             </div>
         </form>
     </div>
 
-    <div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden sticky top-8" style="max-height:calc(100vh - 120px)">
-        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-            <h3 class="font-semibold text-sm">Aperçu en temps réel</h3>
-            <span id="previewStatus" class="text-xs text-gray-500">En pause</span>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden sticky top-8" style="max-height:calc(100vh - 120px)">
+        <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-zinc-300">Aperçu en temps réel</h3>
+            <span id="previewStatus" class="text-xs text-zinc-600">En pause</span>
         </div>
         <div id="previewArea" class="p-4 overflow-y-auto scroll" style="max-height:calc(100vh - 200px)"></div>
     </div>
@@ -112,8 +114,8 @@ function parseLrc(text) {
 function updatePreview() {
     const lines = parseLrc(editor.value);
     preview.innerHTML = lines.map((l, i) =>
-        `<p class="lyrics-line py-2 px-2 rounded cursor-pointer text-sm text-gray-500 transition-all" data-time="${l.time}" data-idx="${i}"><span class="text-xs text-gray-600 mr-2">[${fmt(l.time)}]</span>${l.text ? l.text.replace(/</g,'&lt;') : '♪'}</p>`
-    ).join('') || '<p class="text-gray-500 text-center py-8">Ajoutez des paroles au format LRC pour voir l\'aperçu</p>';
+        `<p class="lyrics-line py-2 px-2 rounded cursor-pointer text-sm text-zinc-500 transition-all" data-time="${l.time}" data-idx="${i}"><span class="text-xs text-zinc-700 mr-2">[${fmt(l.time)}]</span>${l.text ? l.text.replace(/</g,'&lt;') : '♪'}</p>`
+    ).join('') || '<p class="text-zinc-600 text-center py-8">Ajoutez des paroles au format LRC pour voir l\'aperçu</p>';
     preview.querySelectorAll('.lyrics-line').forEach(el => {
         el.onclick = () => { audio.currentTime = parseFloat(el.dataset.time); if(audio.paused) { audio.play(); playBtn.textContent='⏸ Pause'; previewStatus.textContent='Lecture'; }};
     });
@@ -127,12 +129,12 @@ function syncPreview() {
     lines.forEach((el, i) => { if (t >= parseFloat(el.dataset.time)) active = i; });
     lines.forEach((el, i) => {
         if (i === active) {
-            el.classList.add('text-white', 'font-semibold', 'bg-gray-700/50');
-            el.classList.remove('text-gray-500');
+            el.classList.add('text-white', 'font-semibold', 'bg-zinc-800/50');
+            el.classList.remove('text-zinc-500');
             if (!audio.paused) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {
-            el.classList.remove('text-white', 'font-semibold', 'bg-gray-700/50');
-            el.classList.add('text-gray-500');
+            el.classList.remove('text-white', 'font-semibold', 'bg-zinc-800/50');
+            el.classList.add('text-zinc-500');
         }
     });
 }

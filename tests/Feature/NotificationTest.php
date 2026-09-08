@@ -30,8 +30,8 @@ class NotificationTest extends TestCase
     public function test_mark_notifications_as_read(): void
     {
         $user = $this->createUser();
-        Notification::push($user->id, 'test', 'Test', 'Test body');
-        Notification::push($user->id, 'test', 'Test 2', 'Test body 2');
+        Notification::send($user->id, 'test', 'Test', 'Test body');
+        Notification::send($user->id, 'test', 'Test 2', 'Test body 2');
 
         $this->assertEquals(2, Notification::where('user_id', $user->id)->unread()->count());
 
@@ -40,10 +40,10 @@ class NotificationTest extends TestCase
         $this->assertEquals(0, Notification::where('user_id', $user->id)->unread()->count());
     }
 
-    public function test_notification_push_static_method(): void
+    public function test_notification_send_static_method(): void
     {
         $user = $this->createUser();
-        Notification::push($user->id, 'payment_success', 'Paiement OK', 'Votre paiement a été traité.', '/portal');
+        Notification::send($user->id, 'payment_success', 'Paiement OK', 'Votre paiement a été traité.', '/portal');
 
         $this->assertDatabaseHas('notifications', [
             'user_id' => $user->id,

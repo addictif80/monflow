@@ -1,28 +1,41 @@
 @extends('layouts.app')
 @section('title', 'Mes paiements — MonFlow')
 @section('content')
-<h1 class="text-2xl font-bold mb-6">Historique des paiements</h1>
-<div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+<div class="mb-6">
+    <h1 class="text-base font-semibold text-zinc-100">Historique des paiements</h1>
+    <p class="text-sm text-zinc-500 mt-0.5">Tous vos paiements et factures</p>
+</div>
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
-            <thead><tr class="border-b border-gray-700 text-left text-gray-400">
-                <th class="px-4 py-3">Date</th>
-                <th class="px-4 py-3">Description</th>
-                <th class="px-4 py-3">Montant</th>
-                <th class="px-4 py-3">Méthode</th>
-                <th class="px-4 py-3">Statut</th>
-                <th class="px-4 py-3">Facture</th>
-            </tr></thead>
-            <tbody>
+            <thead>
+                <tr class="border-b border-zinc-800">
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Date</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Description</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Montant</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Méthode</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Statut</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Facture</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800/50">
             @forelse($payments as $p)
-                <tr class="border-b border-gray-700/50 hover:bg-gray-700">
-                    <td class="px-4 py-3 text-gray-400">{{ $p->created_at->format('d/m/Y H:i') }}</td>
-                    <td class="px-4 py-3">{{ $p->description }}</td>
-                    <td class="px-4 py-3 font-mono">{{ number_format($p->amount, 2, ',', ' ') }} €</td>
-                    <td class="px-4 py-3 text-gray-400">{{ $p->payment_method }}</td>
+                <tr class="hover:bg-zinc-800/30 transition">
+                    <td class="px-4 py-3 text-zinc-500">{{ $p->created_at->format('d/m/Y H:i') }}</td>
+                    <td class="px-4 py-3 text-zinc-300">{{ $p->description }}</td>
+                    <td class="px-4 py-3 font-mono text-zinc-300">{{ number_format($p->amount, 2, ',', ' ') }} €</td>
+                    <td class="px-4 py-3 text-zinc-500">{{ $p->payment_method }}</td>
                     <td class="px-4 py-3">
-                        @php $colors = ['succeeded' => 'green', 'pending' => 'yellow', 'failed' => 'red', 'refunded' => 'gray', 'partially_refunded' => 'gray']; $c = $colors[$p->status] ?? 'gray'; @endphp
-                        <span class="px-2 py-0.5 text-xs rounded-full bg-{{ $c }}-900/50 text-{{ $c }}-400 border border-{{ $c }}-700">{{ $p->status }}</span>
+                        @php $colors = ['succeeded' => 'emerald', 'pending' => 'yellow', 'failed' => 'red', 'refunded' => 'zinc', 'partially_refunded' => 'zinc']; $c = $colors[$p->status] ?? 'zinc'; @endphp
+                        @if($c === 'emerald')
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{{ $p->status }}</span>
+                        @elseif($c === 'yellow')
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">{{ $p->status }}</span>
+                        @elseif($c === 'red')
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{{ $p->status }}</span>
+                        @else
+                            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-500 border border-zinc-700">{{ $p->status }}</span>
+                        @endif
                     </td>
                     <td class="px-4 py-3">
                         @if($p->status === 'succeeded')
@@ -31,7 +44,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="px-4 py-6 text-center text-gray-500">Aucun paiement.</td></tr>
+                <tr><td colspan="6" class="px-4 py-6 text-center text-zinc-600">Aucun paiement.</td></tr>
             @endforelse
             </tbody>
         </table>

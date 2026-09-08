@@ -5,9 +5,14 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\TicketController;
+use App\Http\Controllers\Portal\PlaylistController;
 use App\Http\Controllers\Portal\DeemixProxyController;
 use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Route;
+
+// ─── Public profiles ───
+Route::get('/u/{displayName}', [\App\Http\Controllers\PublicProfileController::class, 'show'])->name('public.profile');
+Route::get('/public/playlists/{sharedId}/tracks', [\App\Http\Controllers\PublicProfileController::class, 'playlistTracks']);
 
 // ─── Public ───
 Route::get('/', function () {
@@ -35,6 +40,10 @@ Route::get('/verify-email/{token}', [AuthController::class, 'verifyEmail'])->nam
 Route::post('/verify-email/resend', [AuthController::class, 'resendVerification'])->middleware('auth')->name('verify.resend');
 Route::post('/verify-email/resend-public', [AuthController::class, 'resendVerificationPublic'])->middleware('throttle:auth')->name('verify.resend.public');
 
+// ─── Resubscribe after account deletion (public, signed link from the "account deleted" email) ───
+Route::get('/resubscribe/{id}', [AuthController::class, 'resubscribe'])->middleware(['signed', 'throttle:auth'])->name('resubscribe');
+Route::post('/resubscribe/resend', [AuthController::class, 'resendResubscribe'])->middleware('throttle:auth')->name('resubscribe.resend');
+
 // ─── Stripe Webhook (no auth, no CSRF) ───
 Route::post('/stripe/webhook', [PaymentController::class, 'stripeWebhook'])->name('stripe.webhook');
 
@@ -42,10 +51,13 @@ Route::post('/stripe/webhook', [PaymentController::class, 'stripeWebhook'])->nam
 Route::middleware('auth')->group(function () {
     Route::get('/portal', [DashboardController::class, 'index'])->name('portal');
     Route::match(['get', 'post'], '/portal/profile', [DashboardController::class, 'profile']);
+    Route::post('/portal/profile/display-name', [DashboardController::class, 'updateDisplayName']);
+    Route::post('/portal/profile/avatar', [DashboardController::class, 'updateAvatar']);
     Route::match(['get', 'post'], '/portal/change-password', [DashboardController::class, 'changePassword']);
     Route::get('/portal/plans', [DashboardController::class, 'plans']);
     Route::get('/portal/subscribe/{plan}', [DashboardController::class, 'subscribe']);
     Route::post('/portal/resume-payment', [DashboardController::class, 'resumePayment']);
+    Route::get('/portal/cancel-subscription', [DashboardController::class, 'cancelSubscriptionConfirm']);
     Route::post('/portal/cancel-subscription', [DashboardController::class, 'cancelSubscription']);
     Route::get('/portal/wallet', [DashboardController::class, 'wallet']);
     Route::post('/portal/wallet/topup', [DashboardController::class, 'walletTopup']);
@@ -85,6 +97,39 @@ Route::middleware('auth')->group(function () {
     // Invoice PDF
     Route::get('/portal/payments/{id}/invoice', [DashboardController::class, 'invoice']);
 
+    // Playlists
+    Route::get('/portal/playlists', [PlaylistController::class, 'index']);
+    Route::post('/portal/playlists', [PlaylistController::class, 'store']);
+    Route::get('/portal/playlists/search', [PlaylistController::class, 'search']);
+    Route::get('/portal/playlists/{id}', [PlaylistController::class, 'show']);
+    Route::put('/portal/playlists/{id}', [PlaylistController::class, 'update']);
+    Route::delete('/portal/playlists/{id}', [PlaylistController::class, 'destroy']);
+    Route::post('/portal/playlists/{id}/tracks', [PlaylistController::class, 'addTracks']);
+    Route::delete('/portal/playlists/{id}/tracks', [PlaylistController::class, 'removeTrack']);
+    Route::get('/portal/playlists/{id}/info', [PlaylistController::class, 'info']);
+    Route::post('/portal/playlists/{id}/toggle-public', [PlaylistController::class, 'togglePublic']);
+    Route::post('/portal/playlists/{id}/share', [PlaylistController::class, 'share']);
+    Route::post('/portal/shared/{sharedId}/subscribe', [PlaylistController::class, 'subscribe'])->name('playlist.subscribe');
+    Route::delete('/portal/shared/{sharedId}/unsubscribe', [PlaylistController::class, 'unsubscribe']);
+
+    // GDPR data export
+    Route::get('/portal/export-data', [DashboardController::class, 'exportData']);
+
+    // Stop impersonation (admin only, via session)
+    Route::post('/portal/stop-impersonate', [AdminController::class, 'stopImpersonate']);
+
+    // Account deletion
+    Route::match(['get', 'post'], '/portal/delete-account', [DashboardController::class, 'deleteAccount']);
+
+    // Top songs (server-side, toutes écoutes confondues)
+    Route::get('/player/top-songs', function (\App\Services\NavidromeService $nd) {
+        try {
+            return response()->json($nd->getTopPlayedSongs(20));
+        } catch (\Exception $e) {
+            return response()->json([], 500);
+        }
+    });
+
     // Web player — réservé aux abonnés actifs (et admins)
     Route::get('/player', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
@@ -114,11 +159,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::match(['get', 'post'], '/users/create', [AdminController::class, 'userCreate']);
     Route::match(['get', 'post'], '/users/{id}/edit', [AdminController::class, 'userEdit']);
     Route::get('/users/{id}', [AdminController::class, 'userDetail']);
+    Route::post('/users/{id}/reveal-password', [AdminController::class, 'revealPassword']);
     Route::post('/users/{id}/suspend', [AdminController::class, 'userSuspend']);
     Route::post('/users/{id}/reactivate', [AdminController::class, 'userReactivate']);
     Route::post('/users/{id}/delete', [AdminController::class, 'userDelete']);
     Route::post('/users/{id}/release-email', [AdminController::class, 'userReleaseEmail']);
     Route::post('/users/{id}/wallet-adjust', [AdminController::class, 'walletAdjust']);
+    Route::post('/users/{id}/impersonate', [AdminController::class, 'impersonate']);
 
     // Plans
     Route::get('/plans', [AdminController::class, 'plans']);
@@ -137,6 +184,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Subscriptions
     Route::get('/subscriptions', [AdminController::class, 'subscriptions']);
+    Route::get('/subscriptions/reminders-eligible', [AdminController::class, 'subscriptionRemindersEligible']);
+    Route::post('/subscriptions/{id}/send-reminder', [AdminController::class, 'subscriptionSendReminder']);
+    Route::post('/subscriptions/preview-overdue', [AdminController::class, 'subscriptionPreviewOverdue']);
+    Route::post('/subscriptions/process-overdue', [AdminController::class, 'subscriptionProcessOverdue']);
+    Route::post('/subscriptions/process-reminders', [AdminController::class, 'subscriptionProcessReminders']);
     Route::get('/subscriptions/{id}', [AdminController::class, 'subscriptionDetail']);
     Route::post('/subscriptions/{id}/extend', [AdminController::class, 'subscriptionExtend']);
     Route::post('/subscriptions/{id}/cancel', [AdminController::class, 'subscriptionCancel']);
@@ -155,31 +207,53 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Lyrics management
     Route::get('/lyrics', [AdminController::class, 'lyrics']);
+    Route::get('/lyrics/missing', [AdminController::class, 'lyricsMissing']);
+    Route::get('/lyrics/{id}/get', [AdminController::class, 'lyricsGet']);
+    Route::get('/lyrics/{id}/download', [AdminController::class, 'lyricsDownload']);
     Route::get('/lyrics/{id}/edit', [AdminController::class, 'lyricsEdit']);
     Route::post('/lyrics/{id}/save', [AdminController::class, 'lyricsSave']);
     Route::get('/lyrics/{id}/stream', [AdminController::class, 'lyricsStream']);
 
     // Metadata management
     Route::get('/metadata', [AdminController::class, 'metadata']);
+    Route::get('/metadata/search-artwork', [AdminController::class, 'metadataSearchArtwork']);
+    Route::get('/metadata/missing-covers', [AdminController::class, 'metadataMissingCovers']);
+    Route::get('/metadata/{id}/cover-art', [AdminController::class, 'metadataCoverArt']);
     Route::get('/metadata/{id}/edit', [AdminController::class, 'metadataEdit']);
     Route::post('/metadata/{id}/save', [AdminController::class, 'metadataSave']);
+    Route::post('/metadata/{id}/cover', [AdminController::class, 'metadataCover']);
 
     // Duplicate management
     Route::get('/duplicates', [AdminController::class, 'duplicates']);
+    Route::get('/duplicates/scan-status', [AdminController::class, 'duplicateScanStatus']);
     Route::post('/duplicates/batch-delete', [AdminController::class, 'duplicateBatchDelete']);
 
     // Newsletters
     Route::get('/newsletters', [AdminController::class, 'newsletters']);
+    Route::get('/newsletters/weekly-preview', [AdminController::class, 'weeklyNewsletterPreview']);
+    Route::match(['get', 'post'], '/newsletters/template', [AdminController::class, 'newsletterTemplate']);
     Route::match(['get', 'post'], '/newsletters/create', [AdminController::class, 'newsletterCreate']);
     Route::match(['get', 'post'], '/newsletters/{id}/edit', [AdminController::class, 'newsletterEdit']);
     Route::post('/newsletters/{id}/send', [AdminController::class, 'newsletterSend']);
     Route::get('/newsletters/{id}/preview', [AdminController::class, 'newsletterPreview']);
 
+    // Email logs
+    Route::get('/email-logs', [AdminController::class, 'emailLogs']);
+    Route::get('/email-logs/{id}/preview', [AdminController::class, 'emailLogPreview']);
+
     // Audit logs
     Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
+    Route::get('/logs', [AdminController::class, 'serverLogs']);
 
     // Settings
+    Route::get('/settings/stripe', [AdminController::class, 'stripeSettings']);
+    Route::post('/settings/stripe/check-connection', [AdminController::class, 'stripeCheckConnection']);
+    Route::post('/settings/stripe/test-payment', [AdminController::class, 'stripeTestPayment']);
     Route::match(['get', 'post'], '/settings/smtp', [AdminController::class, 'smtpConfig']);
+    Route::match(['get', 'post'], '/settings/restoration-fee', [AdminController::class, 'restorationFeeSettings']);
+    Route::match(['get', 'post'], '/settings/urssaf-report', [AdminController::class, 'urssafReportSettings']);
+    Route::post('/settings/urssaf-report/generate', [AdminController::class, 'urssafReportGenerateNow']);
+    Route::get('/settings/urssaf-report/{id}/download', [AdminController::class, 'urssafReportDownload']);
     Route::get('/settings/email-templates', [AdminController::class, 'emailTemplates']);
     Route::match(['get', 'post'], '/settings/email-templates/create', [AdminController::class, 'emailTemplateEdit']);
     Route::match(['get', 'post'], '/settings/email-templates/{id}', [AdminController::class, 'emailTemplateEdit']);
