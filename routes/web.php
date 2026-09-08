@@ -198,6 +198,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 
     // Tickets
     Route::get('/tickets', [AdminController::class, 'tickets']);
+    Route::match(['get', 'post'], '/tickets/create', [AdminController::class, 'ticketCreate']);
     Route::match(['get', 'post'], '/tickets/{id}', [AdminController::class, 'ticketDetail']);
 
     // Feedbacks

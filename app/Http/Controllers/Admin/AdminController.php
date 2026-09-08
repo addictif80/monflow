@@ -510,6 +510,44 @@ class AdminController extends Controller
         return view('admin.tickets.list', ['tickets' => $q->latest()->paginate(25), 'statusFilter' => $s]);
     }
 
+    public function ticketCreate(Request $request)
+    {
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'user' => 'required|string',
+                'subject' => 'required|max:255',
+                'category' => 'required|in:general,billing,technical,other',
+                'priority' => 'required|in:low,medium,high',
+                'message' => 'required|max:5000',
+            ]);
+
+            $user = User::where('username', $data['user'])->orWhere('email', $data['user'])->first();
+            if (!$user) {
+                return back()->withInput()->with('error', "Aucun utilisateur ne correspond à « {$data['user']} ».");
+            }
+
+            $ticket = Ticket::create([
+                'user_id' => $user->id,
+                'subject' => $data['subject'],
+                'category' => $data['category'],
+                'priority' => $data['priority'],
+            ]);
+            TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'author_id' => auth()->id(),
+                'body' => $data['message'],
+                'is_staff_reply' => true,
+            ]);
+
+            AuditLog::record('ticket.create_on_behalf', $ticket, ['user_id' => $user->id]);
+            Notification::send($user->id, 'support', 'Un ticket a été ouvert pour vous', "L'équipe support a ouvert le ticket \"{$ticket->subject}\" en votre nom.", "/support/tickets/{$ticket->id}");
+
+            return redirect("/admin/tickets/{$ticket->id}")->with('success', "Ticket créé pour {$user->username}.");
+        }
+
+        return view('admin.tickets.create');
+    }
+
     public function ticketDetail(string $id, Request $request)
     {
         $ticket = Ticket::with('user')->findOrFail($id);

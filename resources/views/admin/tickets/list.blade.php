@@ -6,15 +6,18 @@
         <h1 class="text-base font-semibold text-zinc-100">Tickets support</h1>
         <p class="text-sm text-zinc-500 mt-0.5">Demandes d'assistance des utilisateurs</p>
     </div>
-    <form method="GET" class="flex gap-2">
-        <select name="status" onchange="this.form.submit()"
-                class="bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 rounded-lg text-sm text-zinc-100 px-3 py-2 outline-none transition">
-            <option value="">Tous les statuts</option>
-            @foreach(['open' => 'Ouvert', 'in_progress' => 'En cours', 'waiting_customer' => 'Attente client', 'resolved' => 'Résolu', 'closed' => 'Fermé'] as $k => $v)
-                <option value="{{ $k }}" {{ $statusFilter === $k ? 'selected' : '' }}>{{ $v }}</option>
-            @endforeach
-        </select>
-    </form>
+    <div class="flex items-center gap-2">
+        <form method="GET" class="flex gap-2">
+            <select name="status" onchange="this.form.submit()"
+                    class="bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 rounded-lg text-sm text-zinc-100 px-3 py-2 outline-none transition">
+                <option value="">Tous les statuts</option>
+                @foreach(['open' => 'Ouvert', 'in_progress' => 'En cours', 'waiting_customer' => 'Attente client', 'resolved' => 'Résolu', 'closed' => 'Fermé'] as $k => $v)
+                    <option value="{{ $k }}" {{ $statusFilter === $k ? 'selected' : '' }}>{{ $v }}</option>
+                @endforeach
+            </select>
+        </form>
+        <a href="/admin/tickets/create" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition whitespace-nowrap">Créer un ticket</a>
+    </div>
 </div>
 
 <div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
