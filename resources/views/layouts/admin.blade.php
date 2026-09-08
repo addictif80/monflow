@@ -29,6 +29,7 @@
         <a href="/admin/promos" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/promos*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Codes promo</a>
         <a href="/admin/payments" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/payments*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Paiements</a>
         <a href="/admin/refunds" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/refunds*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Remboursements</a>
+        <a href="/admin/settings/urssaf-report" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/settings/urssaf-report*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Déclaration URSSAF</a>
 
         <span class="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider px-3 mt-4 mb-1">Support</span>
         <a href="/admin/tickets" class="text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 px-3 py-2 rounded-lg flex items-center gap-2 {{ request()->is('admin/tickets*') ? 'text-indigo-300 bg-indigo-500/10' : '' }}">Tickets</a>

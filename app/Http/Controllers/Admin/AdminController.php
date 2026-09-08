@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter, AppSetting};
+use App\Models\{User, Wallet, WalletTransaction, Subscription, Plan, PromoCode, Payment, Refund, Ticket, TicketMessage, SmtpConfiguration, EmailTemplate, AuditLog, Notification, Feedback, Newsletter, AppSetting, UrssafReport};
 use App\Http\Requests\{UserCreateRequest, UserEditRequest, PlanRequest, PromoRequest};
-use App\Services\{NavidromeService, StripeService, EmailService};
+use App\Services\{NavidromeService, StripeService, EmailService, UrssafReportService};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Hash, DB, Log, Auth, Artisan};
+use Illuminate\Support\Facades\{Hash, DB, Log, Auth, Artisan, Storage};
 
 class AdminController extends Controller
 {
@@ -594,6 +594,39 @@ class AdminController extends Controller
             return back()->with('success', 'Frais de restauration mis à jour.');
         }
         return view('admin.settings.restoration-fee', compact('settings'));
+    }
+
+    public function urssafReportSettings(Request $request)
+    {
+        $settings = AppSetting::current();
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'urssaf_report_day' => 'required|integer|min:1|max:28',
+                'urssaf_report_email' => 'required|email',
+            ]);
+            $settings->update($data);
+            return back()->with('success', 'Paramètres de déclaration URSSAF mis à jour.');
+        }
+        $reports = UrssafReport::orderByDesc('period_month')->take(24)->get();
+        return view('admin.settings.urssaf-report', compact('settings', 'reports'));
+    }
+
+    public function urssafReportGenerateNow(UrssafReportService $service)
+    {
+        $month = now()->subMonthNoOverflow()->startOfMonth();
+        $report = $service->generateAndSendForMonth($month);
+        return back()->with(
+            $report->status === 'sent' ? 'success' : 'error',
+            $report->status === 'sent'
+                ? "Rapport pour {$month->format('m/Y')} généré et envoyé à {$report->sent_to}."
+                : "Erreur lors de la génération/envoi : {$report->error}"
+        );
+    }
+
+    public function urssafReportDownload(string $id)
+    {
+        $report = UrssafReport::findOrFail($id);
+        return Storage::disk('local')->download($report->pdf_path, 'declaration-urssaf-' . $report->period_month->format('Y-m') . '.pdf');
     }
 
     public function emailTemplates() { return view('admin.settings.email-templates', ['templates' => EmailTemplate::all()]); }
