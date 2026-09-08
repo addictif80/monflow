@@ -199,6 +199,17 @@ HTML;
                 ),
             ],
             [
+                'template_type' => 'ticket_opened_for_you',
+                'subject' => 'Un ticket a été ouvert pour vous — {{ site_name }}',
+                'html_body' => $this->wrap(
+                    $this->heading('Un ticket support a été ouvert pour vous')
+                    . $this->p('Bonjour {{ first_name }},')
+                    . $this->p('Notre équipe support a ouvert le ticket <strong>{{ ticket_subject }}</strong> en votre nom. Vous pouvez le consulter et y répondre à tout moment depuis votre espace.')
+                    . $this->btn('{{ ticket_url }}', 'Voir mon ticket')
+                    . $this->p('Nous reviendrons vers vous rapidement.')
+                ),
+            ],
+            [
                 'template_type' => 'urssaf_report',
                 'subject' => 'Déclaration URSSAF {{ period }} — chiffre d\'affaires à déclarer',
                 'html_body' => $this->wrap(

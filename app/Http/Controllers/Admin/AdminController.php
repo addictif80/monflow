@@ -524,7 +524,7 @@ class AdminController extends Controller
         return response()->json($users);
     }
 
-    public function ticketCreate(Request $request)
+    public function ticketCreate(Request $request, EmailService $email)
     {
         if ($request->isMethod('post')) {
             $data = $request->validate([
@@ -552,6 +552,7 @@ class AdminController extends Controller
 
             AuditLog::record('ticket.create_on_behalf', $ticket, ['user_id' => $user->id]);
             Notification::send($user->id, 'support', 'Un ticket a été ouvert pour vous', "L'équipe support a ouvert le ticket \"{$ticket->subject}\" en votre nom.", "/support/tickets/{$ticket->id}");
+            $email->sendTicketOpened($user, $ticket);
 
             return redirect("/admin/tickets/{$ticket->id}")->with('success', "Ticket créé pour {$user->username}.");
         }

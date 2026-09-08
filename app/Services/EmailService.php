@@ -113,6 +113,7 @@ class EmailService
     public function sendGiftReceived(string $email, string $plan): void { $this->sendTemplate('gift_received', $email, ['plan' => $plan]); }
     public function sendRefund(User $u): void { $this->sendTemplate('refund_processed', $u->email, ['username' => $u->username, 'first_name' => $u->first_name]); }
     public function sendRenewalReminder(User $u, \App\Models\Plan $plan, float $price, bool $promoEnding = false): void { $this->sendTemplate('renewal_reminder', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'plan_name' => $plan->name, 'price' => $price, 'promo_ending' => $promoEnding]); }
+    public function sendTicketOpened(User $u, \App\Models\Ticket $ticket): void { $this->sendTemplate('ticket_opened_for_you', $u->email, ['username' => $u->username, 'first_name' => $u->first_name, 'ticket_subject' => $ticket->subject, 'ticket_url' => config('app.url') . "/support/tickets/{$ticket->id}"]); }
 
     public function sendNewsletterNow(User $u, string $subject, string $htmlBody): void
     {
