@@ -14,7 +14,12 @@ class TicketController extends Controller
     public function create(Request $request)
     {
         if ($request->isMethod('post')) {
-            $data = $request->validate(['subject' => 'required|max:255', 'category' => 'required', 'priority' => 'required', 'message' => 'required']);
+            $data = $request->validate([
+                'subject' => 'required|max:255',
+                'category' => 'required|in:billing,technical,account,other',
+                'priority' => 'required|in:low,medium,high,urgent',
+                'message' => 'required',
+            ]);
             $ticket = Ticket::create(['user_id' => Auth::id(), 'subject' => $data['subject'], 'category' => $data['category'], 'priority' => $data['priority']]);
             TicketMessage::create(['ticket_id' => $ticket->id, 'author_id' => Auth::id(), 'body' => $data['message']]);
             return redirect("/support/tickets/{$ticket->id}")->with('success', 'Ticket créé.');
