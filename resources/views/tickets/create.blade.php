@@ -18,10 +18,10 @@
                 <div>
                     <label class="block text-xs font-medium text-zinc-400 mb-1.5">Catégorie</label>
                     <select name="category" required class="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 rounded-lg text-sm text-zinc-100 px-3 py-2 outline-none transition">
-                        <option value="general">Général</option>
+                        <option value="account">Compte</option>
                         <option value="billing">Facturation</option>
                         <option value="technical">Technique</option>
-                        <option value="other">Autre</option>
+                        <option value="other" selected>Autre</option>
                     </select>
                 </div>
                 <div>

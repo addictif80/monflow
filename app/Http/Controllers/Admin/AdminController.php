@@ -510,21 +510,32 @@ class AdminController extends Controller
         return view('admin.tickets.list', ['tickets' => $q->latest()->paginate(25), 'statusFilter' => $s]);
     }
 
+    public function ticketUserSearch(Request $request)
+    {
+        $q = trim((string) $request->input('q', ''));
+        if (mb_strlen($q) < 2) return response()->json([]);
+
+        $users = User::where('username', 'like', "%{$q}%")
+            ->orWhere('email', 'like', "%{$q}%")
+            ->orderBy('username')
+            ->limit(10)
+            ->get(['id', 'username', 'email']);
+
+        return response()->json($users);
+    }
+
     public function ticketCreate(Request $request)
     {
         if ($request->isMethod('post')) {
             $data = $request->validate([
-                'user' => 'required|string',
+                'user_id' => 'required|exists:users,id',
                 'subject' => 'required|max:255',
-                'category' => 'required|in:general,billing,technical,other',
-                'priority' => 'required|in:low,medium,high',
+                'category' => 'required|in:billing,technical,account,other',
+                'priority' => 'required|in:low,medium,high,urgent',
                 'message' => 'required|max:5000',
             ]);
 
-            $user = User::where('username', $data['user'])->orWhere('email', $data['user'])->first();
-            if (!$user) {
-                return back()->withInput()->with('error', "Aucun utilisateur ne correspond à « {$data['user']} ».");
-            }
+            $user = User::findOrFail($data['user_id']);
 
             $ticket = Ticket::create([
                 'user_id' => $user->id,
